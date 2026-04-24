@@ -1,0 +1,47 @@
+# ─── Python ───────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# ─── Entornos virtuales ───────────────────────────────────────────────────────
+.venv/
+venv/
+env/
+ENV/
+
+# ─── Empaquetado ──────────────────────────────────────────────────────────────
+*.egg-info/
+dist/
+build/
+*.egg
+MANIFEST
+
+# ─── Herramientas de desarrollo ───────────────────────────────────────────────
+.ruff_cache/
+.pytest_cache/
+.mypy_cache/
+htmlcov/
+.coverage
+coverage.xml
+
+# ─── Variables de entorno ─────────────────────────────────────────────────────
+.env
+.env.local
+.env.production
+
+# ─── Editores ─────────────────────────────────────────────────────────────────
+.vscode/
+*.code-workspace
+.idea/
+
+# ─── Sistema operativo ────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ─── Claude Code (herramienta interna, no va al repo público) ────────────────
+CLAUDE.md
+
+# ─── Logs ─────────────────────────────────────────────────────────────────────
+*.log
