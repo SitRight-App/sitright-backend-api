@@ -16,3 +16,11 @@ class ReadingResponse(BaseModel):
     id: str
     posture_class: str
     confidence: float
+
+
+class LatestReadingResponse(BaseModel):
+    id: str
+    vest_id: str
+    posture_class: str
+    confidence: float
+    timestamp: str

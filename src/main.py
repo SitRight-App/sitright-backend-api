@@ -7,6 +7,7 @@ from .posture_capture.infrastructure.persistence.mongo_posture_reading_repositor
     MongoPostureReadingRepository,
 )
 from .posture_capture.application.commands.save_reading_handler import SaveReadingHandler
+from .posture_capture.application.queries.get_latest_reading_handler import GetLatestReadingHandler
 from .posture_capture.interfaces.rest import readings_router
 from .shared.config import settings
 from .shared.database import connect_database, disconnect_database, get_database
@@ -19,6 +20,7 @@ async def lifespan(app: FastAPI):
     repo = MongoPostureReadingRepository(db)
     ml_client = MLServiceClient(settings.ml_service_url)
     readings_router.set_handler(SaveReadingHandler(repo, ml_client))
+    readings_router.set_latest_handler(GetLatestReadingHandler(repo))
     yield
     await disconnect_database()
 
