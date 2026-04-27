@@ -21,6 +21,7 @@ class MongoPostureReadingRepository:
             "timestamp": reading.timestamp.isoformat(),
             "posture_class": reading.posture_class,
             "confidence": reading.confidence,
+            "battery_percent": reading.battery_percent,
         })
 
     async def find_latest(self) -> PostureReading | None:
@@ -36,4 +37,5 @@ class MongoPostureReadingRepository:
             timestamp=datetime.fromisoformat(doc["timestamp"]),
             posture_class=doc["posture_class"],
             confidence=doc["confidence"],
+            battery_percent=doc.get("battery_percent", 100),
         )

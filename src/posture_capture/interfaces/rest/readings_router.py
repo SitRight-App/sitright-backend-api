@@ -48,6 +48,7 @@ async def create_reading(
         dorsal=tuple(request.dorsal),
         lumbar=tuple(request.lumbar),
         timestamp=request.timestamp or datetime.now(timezone.utc),
+        battery_percent=request.battery_percent,
     )
     try:
         reading = await handler.execute(command)
@@ -73,4 +74,5 @@ async def get_latest_reading(
         posture_class=reading.posture_class,
         confidence=reading.confidence,
         timestamp=reading.timestamp.isoformat(),
+        battery_percent=reading.battery_percent,
     )

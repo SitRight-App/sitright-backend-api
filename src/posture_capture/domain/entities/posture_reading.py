@@ -15,3 +15,4 @@ class PostureReading:
     timestamp: datetime
     posture_class: str = "indeterminate"
     confidence: float = 0.0
+    battery_percent: int = 100

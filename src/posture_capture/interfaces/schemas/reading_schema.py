@@ -10,6 +10,7 @@ class ReadingRequest(BaseModel):
     dorsal: list[float] = Field(..., min_length=3, max_length=3)
     lumbar: list[float] = Field(..., min_length=3, max_length=3)
     timestamp: Optional[datetime] = None
+    battery_percent: int = Field(default=100, ge=0, le=100)
 
 
 class ReadingResponse(BaseModel):
@@ -24,3 +25,4 @@ class LatestReadingResponse(BaseModel):
     posture_class: str
     confidence: float
     timestamp: str
+    battery_percent: int

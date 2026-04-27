@@ -16,6 +16,7 @@ class SaveReadingCommand:
     dorsal: tuple[float, float, float]
     lumbar: tuple[float, float, float]
     timestamp: datetime
+    battery_percent: int = 100
 
 
 class MLClassifierPort:
@@ -39,6 +40,7 @@ class SaveReadingHandler:
             dorsal=SensorData(*command.dorsal),
             lumbar=SensorData(*command.lumbar),
             timestamp=command.timestamp,
+            battery_percent=command.battery_percent,
         )
 
         try:
