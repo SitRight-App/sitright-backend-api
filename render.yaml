@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: sitright-backend-api
+    runtime: python
+    plan: starter
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn src.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: MONGO_URI
+        sync: false          # pegar manualmente en Render dashboard
+      - key: MONGO_DB_NAME
+        value: sitright
+      - key: ML_SERVICE_URL
+        value: https://sitright-ml-service.onrender.com
+      - key: JWT_SECRET
+        sync: false          # pegar manualmente en Render dashboard
