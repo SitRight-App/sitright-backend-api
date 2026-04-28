@@ -1,6 +1,7 @@
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from .posture_capture.infrastructure.external.ml_client import MLServiceClient
 from .posture_capture.infrastructure.persistence.mongo_posture_reading_repository import (
@@ -31,6 +32,13 @@ app = FastAPI(
     description="API principal del sistema SitRight — FastAPI + MongoDB",
     version="1.0.0",
     lifespan=lifespan,
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 app.include_router(readings_router.router)
