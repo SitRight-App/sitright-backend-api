@@ -11,18 +11,20 @@ from .iam.application.commands.mark_notification_read_handler import (
 from .iam.application.commands.refresh_token_handler import RefreshTokenHandler
 from .iam.application.commands.register_user_handler import RegisterUserHandler
 from .iam.application.commands.update_profile_handler import UpdateProfileHandler
+from .iam.application.seed_demo_users import seed_demo_users
 from .iam.application.queries.count_unread_notifications_handler import (
     CountUnreadNotificationsHandler,
 )
 from .iam.application.queries.get_user_handler import GetUserHandler
 from .iam.application.queries.list_notifications_handler import ListNotificationsHandler
+from .iam.application.queries.list_users_handler import ListUsersHandler
 from .iam.infrastructure.persistence.mongo_notification_repository import (
     MongoNotificationRepository,
 )
 from .iam.infrastructure.persistence.mongo_user_repository import MongoUserRepository
 from .iam.infrastructure.security.bcrypt_password_service import BcryptPasswordService
 from .iam.infrastructure.security.jwt_token_service import JwtTokenService
-from .iam.interfaces.rest import auth_router, users_router
+from .iam.interfaces.rest import admin_router, auth_router, users_router
 from .iam.interfaces.rest.dependencies import set_token_service
 from .posture_capture.application.commands.save_reading_handler import SaveReadingHandler
 from .posture_capture.application.queries.get_latest_reading_handler import (
@@ -102,14 +104,19 @@ async def lifespan(app: FastAPI):
     )
     set_token_service(token_service)
 
-    auth_router.set_register_handler(RegisterUserHandler(user_repo, password_service))
+    register_handler = RegisterUserHandler(user_repo, password_service)
+    auth_router.set_register_handler(register_handler)
     auth_router.set_login_handler(LoginHandler(user_repo, password_service, token_service))
+
+    # Seed idempotente de cuentas demo (worker + admin) para la sustentación
+    await seed_demo_users(register_handler)
     auth_router.set_refresh_handler(RefreshTokenHandler(token_service))
     users_router.set_get_user_handler(GetUserHandler(user_repo))
     users_router.set_update_profile_handler(UpdateProfileHandler(user_repo))
     users_router.set_list_notifications_handler(ListNotificationsHandler(notif_repo))
     users_router.set_count_unread_handler(CountUnreadNotificationsHandler(notif_repo))
     users_router.set_mark_read_handler(MarkNotificationReadHandler(notif_repo))
+    admin_router.set_list_users_handler(ListUsersHandler(user_repo))
 
     # ── Posture Capture
     posture_repo = MongoPostureReadingRepository(db)
@@ -212,6 +219,7 @@ app.add_middleware(
 
 app.include_router(auth_router.router)
 app.include_router(users_router.router)
+app.include_router(admin_router.router)
 app.include_router(readings_router.router)
 app.include_router(recommendations_router)
 app.include_router(vests_router.router)

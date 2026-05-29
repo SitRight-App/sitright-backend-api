@@ -32,6 +32,13 @@ class MongoUserRepository:
         count = await self._col.count_documents({"email": email.lower().strip()}, limit=1)
         return count > 0
 
+    async def find_all(self, limit: int = 100, offset: int = 0) -> list[User]:
+        cursor = self._col.find({}).sort("created_at", -1).skip(offset).limit(limit)
+        return [self._from_document(doc) async for doc in cursor]
+
+    async def count_all(self) -> int:
+        return await self._col.count_documents({})
+
     def _to_document(self, user: User) -> dict:
         return {
             "_id": str(user.id),
