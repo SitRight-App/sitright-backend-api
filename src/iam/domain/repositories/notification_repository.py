@@ -1,0 +1,13 @@
+from typing import Protocol
+from uuid import UUID
+
+from ..entities.notification import Notification
+
+
+class NotificationRepository(Protocol):
+    async def save(self, notification: Notification) -> None: ...
+    async def find_by_user_id(
+        self, user_id: UUID, limit: int = 20, offset: int = 0
+    ) -> list[Notification]: ...
+    async def count_unread(self, user_id: UUID) -> int: ...
+    async def mark_as_read(self, notification_id: UUID) -> None: ...

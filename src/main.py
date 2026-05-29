@@ -5,9 +5,15 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .iam.application.commands.login_handler import LoginHandler
+from .iam.application.commands.mark_notification_read_handler import (
+    MarkNotificationReadHandler,
+)
 from .iam.application.commands.refresh_token_handler import RefreshTokenHandler
 from .iam.application.commands.register_user_handler import RegisterUserHandler
 from .iam.application.commands.update_profile_handler import UpdateProfileHandler
+from .iam.application.queries.count_unread_notifications_handler import (
+    CountUnreadNotificationsHandler,
+)
 from .iam.application.queries.get_user_handler import GetUserHandler
 from .iam.application.queries.list_notifications_handler import ListNotificationsHandler
 from .iam.infrastructure.persistence.mongo_notification_repository import (
@@ -102,6 +108,8 @@ async def lifespan(app: FastAPI):
     users_router.set_get_user_handler(GetUserHandler(user_repo))
     users_router.set_update_profile_handler(UpdateProfileHandler(user_repo))
     users_router.set_list_notifications_handler(ListNotificationsHandler(notif_repo))
+    users_router.set_count_unread_handler(CountUnreadNotificationsHandler(notif_repo))
+    users_router.set_mark_read_handler(MarkNotificationReadHandler(notif_repo))
 
     # ── Posture Capture
     posture_repo = MongoPostureReadingRepository(db)
