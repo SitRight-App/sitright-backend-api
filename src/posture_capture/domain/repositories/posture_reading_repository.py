@@ -12,4 +12,5 @@ class PostureReadingRepository(Protocol):
         *,
         limit: int = 60,
         since: datetime | None = None,
+        until: datetime | None = None,
     ) -> list[PostureReading]: ...

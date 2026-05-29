@@ -102,17 +102,20 @@ async def get_latest_reading(
 @router.get("/recent", response_model=list[TimelineReadingResponse])
 async def get_recent_readings(
     handler: Annotated[GetRecentReadingsHandler, Depends(get_recent_handler)],
-    limit: int = Query(60, ge=1, le=500),
+    limit: int = Query(60, ge=1, le=2000),
     minutes: int | None = Query(None, ge=1, le=1440),
+    since: datetime | None = Query(None, description="ISO 8601 timestamp inclusivo"),
+    until: datetime | None = Query(None, description="ISO 8601 timestamp inclusivo"),
 ) -> list[TimelineReadingResponse]:
     """Devuelve las lecturas más recientes, ordenadas ascendente por timestamp.
 
-    El frontend usa este endpoint para alimentar el timeline del dashboard.
-    Por defecto trae las últimas 60 lecturas; con `minutes=N` se filtra a la ventana
-    temporal de los últimos N minutos.
+    Modos de uso:
+    - Sin filtros: últimas `limit` lecturas.
+    - Con `minutes`: últimas N minutos.
+    - Con `since` y/o `until`: rango temporal arbitrario (útil para detalle de sesión).
     """
     readings = await handler.execute(
-        GetRecentReadingsQuery(limit=limit, minutes=minutes)
+        GetRecentReadingsQuery(limit=limit, minutes=minutes, since=since, until=until)
     )
     return [
         TimelineReadingResponse(

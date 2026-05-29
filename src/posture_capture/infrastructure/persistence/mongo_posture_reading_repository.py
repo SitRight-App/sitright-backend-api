@@ -35,10 +35,16 @@ class MongoPostureReadingRepository:
         *,
         limit: int = 60,
         since: datetime | None = None,
+        until: datetime | None = None,
     ) -> list[PostureReading]:
         query: dict = {}
+        time_filter: dict[str, str] = {}
         if since is not None:
-            query["timestamp"] = {"$gte": since.isoformat()}
+            time_filter["$gte"] = since.isoformat()
+        if until is not None:
+            time_filter["$lte"] = until.isoformat()
+        if time_filter:
+            query["timestamp"] = time_filter
         cursor = (
             self._col.find(query)
             .sort("timestamp", -1)

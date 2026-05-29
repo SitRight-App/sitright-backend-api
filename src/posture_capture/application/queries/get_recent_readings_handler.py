@@ -7,10 +7,17 @@ from ...domain.repositories.posture_reading_repository import PostureReadingRepo
 
 @dataclass(frozen=True)
 class GetRecentReadingsQuery:
-    """Parámetros de la consulta de lecturas recientes para el timeline."""
+    """Parámetros de la consulta de lecturas recientes para el timeline.
+
+    - `minutes` y `(since, until)` son mutuamente excluyentes; si se pasan
+      `since`/`until` se ignora `minutes`.
+    - Si nada se especifica, se devuelven las últimas `limit` lecturas sin filtro temporal.
+    """
 
     limit: int = 60
-    minutes: int | None = None  # si se especifica, filtra a las últimas `minutes` minutos
+    minutes: int | None = None
+    since: datetime | None = None
+    until: datetime | None = None
 
 
 class GetRecentReadingsHandler:
@@ -20,6 +27,10 @@ class GetRecentReadingsHandler:
         self._repo = repo
 
     async def execute(self, query: GetRecentReadingsQuery) -> list[PostureReading]:
+        if query.since is not None or query.until is not None:
+            return await self._repo.find_recent(
+                limit=query.limit, since=query.since, until=query.until
+            )
         since: datetime | None = None
         if query.minutes is not None:
             since = datetime.now(timezone.utc) - timedelta(minutes=query.minutes)
