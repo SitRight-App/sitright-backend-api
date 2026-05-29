@@ -22,6 +22,9 @@ from .posture_capture.application.commands.save_reading_handler import SaveReadi
 from .posture_capture.application.queries.get_latest_reading_handler import (
     GetLatestReadingHandler,
 )
+from .posture_capture.application.queries.get_recent_readings_handler import (
+    GetRecentReadingsHandler,
+)
 from .posture_capture.infrastructure.external.ml_client import MLServiceClient
 from .posture_capture.infrastructure.persistence.mongo_posture_reading_repository import (
     MongoPostureReadingRepository,
@@ -106,6 +109,7 @@ async def lifespan(app: FastAPI):
     save_reading_handler = SaveReadingHandler(posture_repo, ml_client)
     readings_router.set_handler(save_reading_handler)
     readings_router.set_latest_handler(GetLatestReadingHandler(posture_repo))
+    readings_router.set_recent_handler(GetRecentReadingsHandler(posture_repo))
 
     # ── Vest Management
     vest_repo = MongoVestDeviceRepository(db)

@@ -2,16 +2,26 @@ from datetime import datetime, timezone
 from typing import Annotated
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from ...application.commands.save_reading_handler import SaveReadingCommand, SaveReadingHandler
 from ...application.queries.get_latest_reading_handler import GetLatestReadingHandler
-from ..schemas.reading_schema import LatestReadingResponse, ReadingRequest, ReadingResponse
+from ...application.queries.get_recent_readings_handler import (
+    GetRecentReadingsHandler,
+    GetRecentReadingsQuery,
+)
+from ..schemas.reading_schema import (
+    LatestReadingResponse,
+    ReadingRequest,
+    ReadingResponse,
+    TimelineReadingResponse,
+)
 
 router = APIRouter(prefix="/api/v1/readings", tags=["posture_capture"])
 
 _handler: SaveReadingHandler | None = None
 _latest_handler: GetLatestReadingHandler | None = None
+_recent_handler: GetRecentReadingsHandler | None = None
 
 
 def set_handler(handler: SaveReadingHandler) -> None:
@@ -24,6 +34,11 @@ def set_latest_handler(handler: GetLatestReadingHandler) -> None:
     _latest_handler = handler
 
 
+def set_recent_handler(handler: GetRecentReadingsHandler) -> None:
+    global _recent_handler
+    _recent_handler = handler
+
+
 def get_handler() -> SaveReadingHandler:
     if _handler is None:
         raise RuntimeError("SaveReadingHandler not initialized")
@@ -34,6 +49,12 @@ def get_latest_handler() -> GetLatestReadingHandler:
     if _latest_handler is None:
         raise RuntimeError("GetLatestReadingHandler not initialized")
     return _latest_handler
+
+
+def get_recent_handler() -> GetRecentReadingsHandler:
+    if _recent_handler is None:
+        raise RuntimeError("GetRecentReadingsHandler not initialized")
+    return _recent_handler
 
 
 @router.post("", status_code=201, response_model=ReadingResponse)
@@ -76,3 +97,29 @@ async def get_latest_reading(
         timestamp=reading.timestamp.isoformat(),
         battery_percent=reading.battery_percent,
     )
+
+
+@router.get("/recent", response_model=list[TimelineReadingResponse])
+async def get_recent_readings(
+    handler: Annotated[GetRecentReadingsHandler, Depends(get_recent_handler)],
+    limit: int = Query(60, ge=1, le=500),
+    minutes: int | None = Query(None, ge=1, le=1440),
+) -> list[TimelineReadingResponse]:
+    """Devuelve las lecturas más recientes, ordenadas ascendente por timestamp.
+
+    El frontend usa este endpoint para alimentar el timeline del dashboard.
+    Por defecto trae las últimas 60 lecturas; con `minutes=N` se filtra a la ventana
+    temporal de los últimos N minutos.
+    """
+    readings = await handler.execute(
+        GetRecentReadingsQuery(limit=limit, minutes=minutes)
+    )
+    return [
+        TimelineReadingResponse(
+            id=str(r.id),
+            posture_class=r.posture_class,
+            confidence=r.confidence,
+            timestamp=r.timestamp.isoformat(),
+        )
+        for r in readings
+    ]

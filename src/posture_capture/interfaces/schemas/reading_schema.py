@@ -26,3 +26,12 @@ class LatestReadingResponse(BaseModel):
     confidence: float
     timestamp: str
     battery_percent: int
+
+
+class TimelineReadingResponse(BaseModel):
+    """Forma ligera de una lectura, optimizada para alimentar el timeline."""
+
+    id: str
+    posture_class: str
+    confidence: float
+    timestamp: str

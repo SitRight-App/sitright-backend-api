@@ -28,6 +28,31 @@ class MongoPostureReadingRepository:
         doc = await self._col.find_one(sort=[("timestamp", -1)])
         if doc is None:
             return None
+        return self._from_doc(doc)
+
+    async def find_recent(
+        self,
+        *,
+        limit: int = 60,
+        since: datetime | None = None,
+    ) -> list[PostureReading]:
+        query: dict = {}
+        if since is not None:
+            query["timestamp"] = {"$gte": since.isoformat()}
+        cursor = (
+            self._col.find(query)
+            .sort("timestamp", -1)
+            .limit(limit)
+        )
+        docs: list[dict] = []
+        async for doc in cursor:
+            docs.append(doc)
+        # Return ascending so el consumidor recibe la línea temporal en orden cronológico.
+        docs.reverse()
+        return [self._from_doc(d) for d in docs]
+
+    @staticmethod
+    def _from_doc(doc: dict) -> PostureReading:
         return PostureReading(
             id=UUID(doc["_id"]),
             vest_id=doc["vest_id"],
