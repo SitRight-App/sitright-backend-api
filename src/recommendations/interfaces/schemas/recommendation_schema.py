@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from pydantic import BaseModel
 
 
@@ -20,3 +22,8 @@ class RecommendationResponse(BaseModel):
     featured_title_emphasis: str | None = None
     featured_body: str | None = None
     steps: list[RecommendationStepResponse] = []
+
+
+class AppliedRecommendationResponse(BaseModel):
+    recommendation_id: str
+    applied_at: datetime
