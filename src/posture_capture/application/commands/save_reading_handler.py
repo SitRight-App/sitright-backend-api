@@ -1,4 +1,5 @@
 import dataclasses
+import logging
 from dataclasses import dataclass
 from datetime import datetime
 from uuid import UUID
@@ -6,6 +7,8 @@ from uuid import UUID
 from ...domain.entities.posture_reading import PostureReading
 from ...domain.repositories.posture_reading_repository import PostureReadingRepository
 from ...domain.value_objects.sensor_data import SensorData
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -48,8 +51,15 @@ class SaveReadingHandler:
             reading = dataclasses.replace(
                 reading, posture_class=posture_class, confidence=confidence
             )
-        except Exception:
-            pass  # keep "indeterminate" if ml-service is unavailable
+        except Exception as exc:
+            # HU-04 AC4 — el ml-service no respondió a tiempo (timeout 2s)
+            # u otro error: la lectura queda como 'indeterminate' y se registra
+            # el incidente para revisión.
+            logger.warning(
+                "[ml] no se pudo clasificar la lectura %s, queda como indeterminate: %s",
+                reading.id,
+                exc,
+            )
 
         await self._repo.save(reading)
         return reading

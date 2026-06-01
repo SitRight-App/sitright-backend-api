@@ -1,14 +1,21 @@
+import logging
 from datetime import datetime, timezone
 from typing import Annotated
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
+logger = logging.getLogger(__name__)
+
 from ....iam.domain.services.token_service import TokenPayload
 from ....iam.interfaces.rest.dependencies import get_current_user
 from ....vest_management.application.queries.get_my_vest_handler import (
     GetMyVestHandler,
     GetMyVestQuery,
+)
+from ....vest_management.application.queries.get_vest_by_mac_handler import (
+    GetVestByMacHandler,
+    GetVestByMacQuery,
 )
 from ...application.commands.save_reading_handler import SaveReadingCommand, SaveReadingHandler
 from ...application.queries.get_latest_reading_handler import GetLatestReadingHandler
@@ -29,6 +36,7 @@ _handler: SaveReadingHandler | None = None
 _latest_handler: GetLatestReadingHandler | None = None
 _recent_handler: GetRecentReadingsHandler | None = None
 _get_my_vest_handler: GetMyVestHandler | None = None
+_get_vest_by_mac_handler: GetVestByMacHandler | None = None
 
 
 def set_handler(handler: SaveReadingHandler) -> None:
@@ -49,6 +57,11 @@ def set_recent_handler(handler: GetRecentReadingsHandler) -> None:
 def set_get_my_vest_handler(handler: GetMyVestHandler) -> None:
     global _get_my_vest_handler
     _get_my_vest_handler = handler
+
+
+def set_get_vest_by_mac_handler(handler: GetVestByMacHandler) -> None:
+    global _get_vest_by_mac_handler
+    _get_vest_by_mac_handler = handler
 
 
 def get_handler() -> SaveReadingHandler:
@@ -75,6 +88,12 @@ def get_my_vest_handler() -> GetMyVestHandler:
     return _get_my_vest_handler
 
 
+def get_vest_by_mac_handler() -> GetVestByMacHandler:
+    if _get_vest_by_mac_handler is None:
+        raise RuntimeError("GetVestByMacHandler (readings_router) no inicializado")
+    return _get_vest_by_mac_handler
+
+
 async def _resolve_user_vest_id(
     current: TokenPayload,
     vest_handler: GetMyVestHandler,
@@ -90,7 +109,21 @@ async def _resolve_user_vest_id(
 async def create_reading(
     request: ReadingRequest,
     handler: Annotated[SaveReadingHandler, Depends(get_handler)],
+    vest_lookup: Annotated[GetVestByMacHandler, Depends(get_vest_by_mac_handler)],
 ) -> ReadingResponse:
+    # HU-02 AC3 — el identificador del chaleco debe estar vinculado a un
+    # usuario. Si no, respondemos 403 y registramos el intento en logs.
+    vest = await vest_lookup.execute(GetVestByMacQuery(mac_address=request.vest_id))
+    if vest is None or not vest.is_linked():
+        logger.warning(
+            "[readings] intento de POST de chaleco no vinculado: vest_id=%s",
+            request.vest_id,
+        )
+        raise HTTPException(
+            status_code=403,
+            detail="El chaleco no está vinculado a ningún usuario",
+        )
+
     command = SaveReadingCommand(
         reading_id=uuid4(),
         vest_id=request.vest_id,

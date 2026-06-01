@@ -8,7 +8,10 @@ class MLServiceClient:
         self._base_url = base_url
 
     async def classify(self, reading: PostureReading) -> tuple[str, float]:
-        async with httpx.AsyncClient(timeout=5.0) as client:
+        # HU-04 AC4 — el AC exige timeout de 2 s. Si el ml-service no
+        # responde dentro de ese plazo, el SaveReadingHandler captura la
+        # excepción y la lectura queda como 'indeterminate'.
+        async with httpx.AsyncClient(timeout=2.0) as client:
             response = await client.post(
                 f"{self._base_url}/ml/classify",
                 json={

@@ -82,6 +82,9 @@ from .vest_management.application.commands.send_command_handler import (
 )
 from .vest_management.application.commands.unlink_vest_handler import UnlinkVestHandler
 from .vest_management.application.queries.get_my_vest_handler import GetMyVestHandler
+from .vest_management.application.queries.get_vest_by_mac_handler import (
+    GetVestByMacHandler,
+)
 from .vest_management.infrastructure.persistence.mongo_vest_device_repository import (
     MongoVestDeviceRepository,
 )
@@ -151,6 +154,8 @@ async def lifespan(app: FastAPI):
     # Inyectamos el lookup del vest del usuario en readings_router para
     # filtrar /readings/latest y /recent por chaleco vinculado.
     readings_router.set_get_my_vest_handler(get_my_vest_handler)
+    # Lookup por MAC para validar 403 en POST /readings (HU-02 AC3).
+    readings_router.set_get_vest_by_mac_handler(GetVestByMacHandler(vest_repo))
 
     # ── Recommendations (catálogo estático + persistencia de 'aplicadas')
     applied_recs_repo = MongoAppliedRecommendationRepository(db)

@@ -22,15 +22,21 @@ from src.posture_capture.application.queries.get_latest_reading_handler import G
 from src.posture_capture.domain.entities.posture_reading import PostureReading
 from src.posture_capture.interfaces.rest import readings_router
 from src.vest_management.application.queries.get_my_vest_handler import GetMyVestHandler
+from src.vest_management.application.queries.get_vest_by_mac_handler import (
+    GetVestByMacHandler,
+)
 from src.vest_management.domain.entities.vest_device import VestDevice
 from uuid import UUID, uuid4
 from datetime import datetime, timezone
 
 USER_ID = uuid4()
 VEST_ID = uuid4()
+VEST_MAC = "AA:BB:CC:11:22:33"
 
+# El firmware envía la MAC del chaleco en el campo "vest_id" del payload;
+# el backend la resuelve contra el repositorio de vest_management.
 VALID_PAYLOAD = {
-    "vest_id": str(VEST_ID),
+    "vest_id": VEST_MAC,
     "cervical": [0.1, 0.2, 9.8],
     "dorsal":   [0.05, 0.1, 9.9],
     "lumbar":   [0.0, 0.15, 9.7],
@@ -59,7 +65,7 @@ class _StubMLClient:
 
 
 class _StubVestRepo:
-    """Repo en memoria mínimo que sólo responde find_by_user_id para el handler."""
+    """Repo en memoria mínimo: responde find_by_user_id y find_by_mac_address."""
 
     def __init__(self, vest: VestDevice | None) -> None:
         self._vest = vest
@@ -69,10 +75,14 @@ class _StubVestRepo:
             return None
         return self._vest if self._vest.user_id == user_id else None
 
+    async def find_by_mac_address(self, mac: str) -> VestDevice | None:
+        if self._vest is None:
+            return None
+        return self._vest if self._vest.mac_address == mac else None
+
     # Métodos no usados en estos tests, pero presentes en el Protocol.
     async def save(self, device): ...  # pragma: no cover
     async def find_by_id(self, device_id): ...  # pragma: no cover
-    async def find_by_mac_address(self, mac): ...  # pragma: no cover
     async def find_by_mqtt_username(self, username): ...  # pragma: no cover
     async def exists_by_mac_address(self, mac): return False  # pragma: no cover
 
@@ -80,12 +90,25 @@ class _StubVestRepo:
 def _build_linked_vest() -> VestDevice:
     return VestDevice(
         id=VEST_ID,
-        mac_address="AA:BB:CC:00:11:22",
+        mac_address=VEST_MAC,
         firmware_version="1.0.0",
         created_at=datetime.now(timezone.utc),
         user_id=USER_ID,
         linked_at=datetime.now(timezone.utc),
         is_active=True,
+    )
+
+
+def _build_unlinked_vest() -> VestDevice:
+    """Chaleco registrado pero sin user_id (no vinculado)."""
+    return VestDevice(
+        id=VEST_ID,
+        mac_address=VEST_MAC,
+        firmware_version="1.0.0",
+        created_at=datetime.now(timezone.utc),
+        user_id=None,
+        linked_at=None,
+        is_active=False,
     )
 
 
@@ -98,10 +121,15 @@ def client_and_repo():
     repo = _InMemoryRepo()
     handler = SaveReadingHandler(repo, _StubMLClient())
     latest_handler = GetLatestReadingHandler(repo)
-    vest_handler = GetMyVestHandler(_StubVestRepo(_build_linked_vest()))
+    vest_repo = _StubVestRepo(_build_linked_vest())
+    vest_handler = GetMyVestHandler(vest_repo)
+    vest_by_mac_handler = GetVestByMacHandler(vest_repo)
     app.dependency_overrides[readings_router.get_handler] = lambda: handler
     app.dependency_overrides[readings_router.get_latest_handler] = lambda: latest_handler
     app.dependency_overrides[readings_router.get_my_vest_handler] = lambda: vest_handler
+    app.dependency_overrides[readings_router.get_vest_by_mac_handler] = (
+        lambda: vest_by_mac_handler
+    )
     app.dependency_overrides[get_current_user] = _fake_current_user
     with TestClient(app) as c:
         yield c, repo
@@ -114,13 +142,34 @@ def client_without_vest():
     repo = _InMemoryRepo()
     handler = SaveReadingHandler(repo, _StubMLClient())
     latest_handler = GetLatestReadingHandler(repo)
-    vest_handler = GetMyVestHandler(_StubVestRepo(None))
+    vest_repo = _StubVestRepo(None)
+    vest_handler = GetMyVestHandler(vest_repo)
+    vest_by_mac_handler = GetVestByMacHandler(vest_repo)
     app.dependency_overrides[readings_router.get_handler] = lambda: handler
     app.dependency_overrides[readings_router.get_latest_handler] = lambda: latest_handler
     app.dependency_overrides[readings_router.get_my_vest_handler] = lambda: vest_handler
+    app.dependency_overrides[readings_router.get_vest_by_mac_handler] = (
+        lambda: vest_by_mac_handler
+    )
     app.dependency_overrides[get_current_user] = _fake_current_user
     with TestClient(app) as c:
         yield c
+    app.dependency_overrides.clear()
+
+
+@pytest.fixture
+def client_with_unlinked_vest():
+    """Chaleco existe en BD pero sin user_id — para probar HU-02 AC3 (403)."""
+    repo = _InMemoryRepo()
+    handler = SaveReadingHandler(repo, _StubMLClient())
+    vest_repo = _StubVestRepo(_build_unlinked_vest())
+    vest_by_mac_handler = GetVestByMacHandler(vest_repo)
+    app.dependency_overrides[readings_router.get_handler] = lambda: handler
+    app.dependency_overrides[readings_router.get_vest_by_mac_handler] = (
+        lambda: vest_by_mac_handler
+    )
+    with TestClient(app) as c:
+        yield c, repo
     app.dependency_overrides.clear()
 
 
@@ -166,6 +215,19 @@ def test_hu02_datos_incompletos_no_almacenados(client_and_repo):
     assert len(repo.saved) == 0
 
 
+# Unhappy HU-02 AC3: el chaleco no está vinculado a ningún usuario → 403 + log
+def test_hu02_chaleco_no_vinculado_retorna_403(client_with_unlinked_vest, caplog):
+    client, repo = client_with_unlinked_vest
+    import logging
+    with caplog.at_level(logging.WARNING):
+        response = client.post("/api/v1/readings", json=VALID_PAYLOAD)
+    assert response.status_code == 403
+    assert "vinculado" in response.json()["detail"].lower()
+    assert len(repo.saved) == 0
+    # Log del intento (AC3 lo exige)
+    assert any("no vinculado" in r.message.lower() for r in caplog.records)
+
+
 # ── HU-03 ──────────────────────────────────────────────────────────────────────
 
 # Happy: valores dentro de ±16g → aceptados
@@ -197,7 +259,7 @@ def test_hu06_latest_devuelve_ultima_lectura(client_and_repo):
     assert response.status_code == 200
     body = response.json()
     assert body["posture_class"] == "adequate"
-    assert body["vest_id"] == str(VEST_ID)
+    assert body["vest_id"] == VEST_MAC
     assert body["battery_percent"] == 80
     assert "timestamp" in body
 
