@@ -12,12 +12,14 @@ class GetRecentReadingsQuery:
     - `minutes` y `(since, until)` son mutuamente excluyentes; si se pasan
       `since`/`until` se ignora `minutes`.
     - Si nada se especifica, se devuelven las últimas `limit` lecturas sin filtro temporal.
+    - `vest_id` filtra a las lecturas del chaleco del usuario actual.
     """
 
     limit: int = 60
     minutes: int | None = None
     since: datetime | None = None
     until: datetime | None = None
+    vest_id: str | None = None
 
 
 class GetRecentReadingsHandler:
@@ -29,9 +31,14 @@ class GetRecentReadingsHandler:
     async def execute(self, query: GetRecentReadingsQuery) -> list[PostureReading]:
         if query.since is not None or query.until is not None:
             return await self._repo.find_recent(
-                limit=query.limit, since=query.since, until=query.until
+                vest_id=query.vest_id,
+                limit=query.limit,
+                since=query.since,
+                until=query.until,
             )
         since: datetime | None = None
         if query.minutes is not None:
             since = datetime.now(timezone.utc) - timedelta(minutes=query.minutes)
-        return await self._repo.find_recent(limit=query.limit, since=since)
+        return await self._repo.find_recent(
+            vest_id=query.vest_id, limit=query.limit, since=since
+        )

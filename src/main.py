@@ -130,6 +130,9 @@ async def lifespan(app: FastAPI):
     readings_router.set_handler(save_reading_handler)
     readings_router.set_latest_handler(GetLatestReadingHandler(posture_repo))
     readings_router.set_recent_handler(GetRecentReadingsHandler(posture_repo))
+    # readings_router necesita resolver el vest del usuario para filtrar,
+    # pero `vest_repo` aún no existe en este punto del lifespan; lo asignamos
+    # después de crear el repo de vest_management. (Ver más abajo.)
 
     # ── Vest Management
     vest_repo = MongoVestDeviceRepository(db)
@@ -142,8 +145,12 @@ async def lifespan(app: FastAPI):
         )
     )
     vests_router.set_calibrate_handler(CalibrateVestHandler(vest_repo))
-    vests_router.set_get_my_vest_handler(GetMyVestHandler(vest_repo))
+    get_my_vest_handler = GetMyVestHandler(vest_repo)
+    vests_router.set_get_my_vest_handler(get_my_vest_handler)
     vests_router.set_unlink_handler(UnlinkVestHandler(vest_repo))
+    # Inyectamos el lookup del vest del usuario en readings_router para
+    # filtrar /readings/latest y /recent por chaleco vinculado.
+    readings_router.set_get_my_vest_handler(get_my_vest_handler)
 
     # ── Recommendations (catálogo estático + persistencia de 'aplicadas')
     applied_recs_repo = MongoAppliedRecommendationRepository(db)

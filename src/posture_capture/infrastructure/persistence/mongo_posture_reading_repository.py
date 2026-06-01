@@ -24,8 +24,9 @@ class MongoPostureReadingRepository:
             "battery_percent": reading.battery_percent,
         })
 
-    async def find_latest(self) -> PostureReading | None:
-        doc = await self._col.find_one(sort=[("timestamp", -1)])
+    async def find_latest(self, vest_id: str | None = None) -> PostureReading | None:
+        query: dict = {"vest_id": vest_id} if vest_id is not None else {}
+        doc = await self._col.find_one(query, sort=[("timestamp", -1)])
         if doc is None:
             return None
         return self._from_doc(doc)
@@ -33,11 +34,14 @@ class MongoPostureReadingRepository:
     async def find_recent(
         self,
         *,
+        vest_id: str | None = None,
         limit: int = 60,
         since: datetime | None = None,
         until: datetime | None = None,
     ) -> list[PostureReading]:
         query: dict = {}
+        if vest_id is not None:
+            query["vest_id"] = vest_id
         time_filter: dict[str, str] = {}
         if since is not None:
             time_filter["$gte"] = since.isoformat()
