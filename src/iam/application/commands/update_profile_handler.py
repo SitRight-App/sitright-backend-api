@@ -15,6 +15,7 @@ class UpdateProfileCommand:
     height_cm: float | None = None
     email_notifications: bool | None = None
     alert_threshold_minutes: int | None = None
+    break_reminder_minutes: int | None = None
     language: str | None = None
 
 
@@ -40,6 +41,7 @@ class UpdateProfileHandler:
             for v in (
                 command.email_notifications,
                 command.alert_threshold_minutes,
+                command.break_reminder_minutes,
                 command.language,
             )
         ):
@@ -53,6 +55,11 @@ class UpdateProfileHandler:
                     command.alert_threshold_minutes
                     if command.alert_threshold_minutes is not None
                     else user.preferences.alert_threshold_minutes
+                ),
+                break_reminder_minutes=(
+                    command.break_reminder_minutes
+                    if command.break_reminder_minutes is not None
+                    else user.preferences.break_reminder_minutes
                 ),
                 language=command.language or user.preferences.language,
             )

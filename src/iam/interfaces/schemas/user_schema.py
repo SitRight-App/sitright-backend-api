@@ -11,6 +11,7 @@ class AnthropometricSchema(BaseModel):
 class PreferencesSchema(BaseModel):
     email_notifications: bool = True
     alert_threshold_minutes: int = 30
+    break_reminder_minutes: int = 60
     language: str = "es"
 
 
@@ -31,6 +32,7 @@ class UpdateProfileRequest(BaseModel):
     height_cm: float | None = None
     email_notifications: bool | None = None
     alert_threshold_minutes: int | None = None
+    break_reminder_minutes: int | None = None
     language: str | None = None
 
 

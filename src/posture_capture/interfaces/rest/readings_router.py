@@ -24,9 +24,11 @@ from ...application.queries.get_recent_readings_handler import (
     GetRecentReadingsQuery,
 )
 from ..schemas.reading_schema import (
+    LatestRawReadingResponse,
     LatestReadingResponse,
     ReadingRequest,
     ReadingResponse,
+    SensorTriple,
     TimelineReadingResponse,
 )
 
@@ -166,6 +168,31 @@ async def get_latest_reading(
         confidence=reading.confidence,
         timestamp=reading.timestamp.isoformat(),
         battery_percent=reading.battery_percent,
+    )
+
+
+@router.get("/latest/raw", response_model=LatestRawReadingResponse)
+async def get_latest_raw_reading(
+    current: Annotated[TokenPayload, Depends(get_current_user)],
+    handler: Annotated[GetLatestReadingHandler, Depends(get_latest_handler)],
+    vest_handler: Annotated[GetMyVestHandler, Depends(get_my_vest_handler)],
+) -> LatestRawReadingResponse:
+    """Última lectura con sensores crudos — usada por la calibración (HU-15).
+
+    Devuelve los valores ax/ay/az de cervical, dorsal y lumbar para que el
+    cliente promedie un muestreo de 5 segundos y detecte movimiento.
+    """
+    vest_id = await _resolve_user_vest_id(current, vest_handler)
+    reading = await handler.execute(vest_id=vest_id)
+    if reading is None:
+        raise HTTPException(status_code=404, detail="No hay lecturas registradas aún")
+    return LatestRawReadingResponse(
+        id=str(reading.id),
+        vest_id=reading.vest_id,
+        cervical=SensorTriple(ax=reading.cervical.ax, ay=reading.cervical.ay, az=reading.cervical.az),
+        dorsal=SensorTriple(ax=reading.dorsal.ax, ay=reading.dorsal.ay, az=reading.dorsal.az),
+        lumbar=SensorTriple(ax=reading.lumbar.ax, ay=reading.lumbar.ay, az=reading.lumbar.az),
+        timestamp=reading.timestamp.isoformat(),
     )
 
 

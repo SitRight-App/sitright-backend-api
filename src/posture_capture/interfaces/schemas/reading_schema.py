@@ -35,3 +35,24 @@ class TimelineReadingResponse(BaseModel):
     posture_class: str
     confidence: float
     timestamp: str
+
+
+class SensorTriple(BaseModel):
+    ax: float
+    ay: float
+    az: float
+
+
+class LatestRawReadingResponse(BaseModel):
+    """Última lectura con los valores crudos de los 3 sensores.
+
+    Usado por el flujo de calibración (HU-15) para muestrear la postura
+    actual del trabajador durante 5 segundos.
+    """
+
+    id: str
+    vest_id: str
+    cervical: SensorTriple
+    dorsal: SensorTriple
+    lumbar: SensorTriple
+    timestamp: str

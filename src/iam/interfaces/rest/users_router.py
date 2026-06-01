@@ -126,6 +126,7 @@ def _to_user_response(user) -> UserResponse:
         preferences=PreferencesSchema(
             email_notifications=user.preferences.email_notifications,
             alert_threshold_minutes=user.preferences.alert_threshold_minutes,
+            break_reminder_minutes=user.preferences.break_reminder_minutes,
             language=user.preferences.language,
         ),
     )
@@ -155,6 +156,7 @@ async def update_me(
         height_cm=request.height_cm,
         email_notifications=request.email_notifications,
         alert_threshold_minutes=request.alert_threshold_minutes,
+        break_reminder_minutes=request.break_reminder_minutes,
         language=request.language,
     )
     try:

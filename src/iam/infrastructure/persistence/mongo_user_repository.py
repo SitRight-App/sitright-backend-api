@@ -53,6 +53,7 @@ class MongoUserRepository:
             "preferences": {
                 "email_notifications": user.preferences.email_notifications,
                 "alert_threshold_minutes": user.preferences.alert_threshold_minutes,
+                "break_reminder_minutes": user.preferences.break_reminder_minutes,
                 "language": user.preferences.language,
             },
             "is_active": user.is_active,
@@ -78,6 +79,8 @@ class MongoUserRepository:
             preferences=Preferences(
                 email_notifications=prefs_doc.get("email_notifications", True),
                 alert_threshold_minutes=prefs_doc.get("alert_threshold_minutes", 30),
+                # HU-12 AC4: default 60 si nunca se configuró.
+                break_reminder_minutes=prefs_doc.get("break_reminder_minutes", 60),
                 language=prefs_doc.get("language", "es"),
             ),
             is_active=doc.get("is_active", True),
