@@ -5,6 +5,9 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .iam.application.commands.login_handler import LoginHandler
+from .iam.application.commands.mark_all_notifications_read_handler import (
+    MarkAllNotificationsReadHandler,
+)
 from .iam.application.commands.mark_notification_read_handler import (
     MarkNotificationReadHandler,
 )
@@ -77,6 +80,7 @@ from .vest_management.application.commands.register_vest_handler import (
 from .vest_management.application.commands.send_command_handler import (
     SendVestCommandHandler,
 )
+from .vest_management.application.commands.unlink_vest_handler import UnlinkVestHandler
 from .vest_management.application.queries.get_my_vest_handler import GetMyVestHandler
 from .vest_management.infrastructure.persistence.mongo_vest_device_repository import (
     MongoVestDeviceRepository,
@@ -116,6 +120,7 @@ async def lifespan(app: FastAPI):
     users_router.set_list_notifications_handler(ListNotificationsHandler(notif_repo))
     users_router.set_count_unread_handler(CountUnreadNotificationsHandler(notif_repo))
     users_router.set_mark_read_handler(MarkNotificationReadHandler(notif_repo))
+    users_router.set_mark_all_read_handler(MarkAllNotificationsReadHandler(notif_repo))
     admin_router.set_list_users_handler(ListUsersHandler(user_repo))
 
     # ── Posture Capture
@@ -138,6 +143,7 @@ async def lifespan(app: FastAPI):
     )
     vests_router.set_calibrate_handler(CalibrateVestHandler(vest_repo))
     vests_router.set_get_my_vest_handler(GetMyVestHandler(vest_repo))
+    vests_router.set_unlink_handler(UnlinkVestHandler(vest_repo))
 
     # ── Recommendations (catálogo estático + persistencia de 'aplicadas')
     applied_recs_repo = MongoAppliedRecommendationRepository(db)

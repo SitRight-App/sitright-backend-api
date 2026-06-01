@@ -3,6 +3,10 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Response
 
+from ...application.commands.mark_all_notifications_read_handler import (
+    MarkAllNotificationsReadCommand,
+    MarkAllNotificationsReadHandler,
+)
 from ...application.commands.mark_notification_read_handler import (
     MarkNotificationReadCommand,
     MarkNotificationReadHandler,
@@ -38,6 +42,7 @@ _update_profile_handler: UpdateProfileHandler | None = None
 _list_notifications_handler: ListNotificationsHandler | None = None
 _count_unread_handler: CountUnreadNotificationsHandler | None = None
 _mark_read_handler: MarkNotificationReadHandler | None = None
+_mark_all_read_handler: MarkAllNotificationsReadHandler | None = None
 
 
 def set_get_user_handler(handler: GetUserHandler) -> None:
@@ -63,6 +68,11 @@ def set_count_unread_handler(handler: CountUnreadNotificationsHandler) -> None:
 def set_mark_read_handler(handler: MarkNotificationReadHandler) -> None:
     global _mark_read_handler
     _mark_read_handler = handler
+
+
+def set_mark_all_read_handler(handler: MarkAllNotificationsReadHandler) -> None:
+    global _mark_all_read_handler
+    _mark_all_read_handler = handler
 
 
 def get_get_user_handler() -> GetUserHandler:
@@ -93,6 +103,12 @@ def get_mark_read_handler() -> MarkNotificationReadHandler:
     if _mark_read_handler is None:
         raise RuntimeError("MarkNotificationReadHandler no inicializado")
     return _mark_read_handler
+
+
+def get_mark_all_read_handler() -> MarkAllNotificationsReadHandler:
+    if _mark_all_read_handler is None:
+        raise RuntimeError("MarkAllNotificationsReadHandler no inicializado")
+    return _mark_all_read_handler
 
 
 def _to_user_response(user) -> UserResponse:
@@ -197,3 +213,15 @@ async def mark_my_notification_read(
     """Marca una notificación como leída. Idempotente."""
     await handler.execute(MarkNotificationReadCommand(notification_id=notification_id))
     return Response(status_code=204)
+
+
+@router.patch("/me/notifications/read-all")
+async def mark_all_my_notifications_read(
+    current: Annotated[TokenPayload, Depends(get_current_user)],
+    handler: Annotated[
+        MarkAllNotificationsReadHandler, Depends(get_mark_all_read_handler)
+    ],
+) -> dict:
+    """Marca todas las notificaciones del usuario como leídas. Devuelve el conteo afectado."""
+    count = await handler.execute(MarkAllNotificationsReadCommand(user_id=current.user_id))
+    return {"marked_as_read": count}

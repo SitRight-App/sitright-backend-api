@@ -43,6 +43,13 @@ class MongoNotificationRepository:
             {"$set": {"is_read": True, "read_at": datetime.utcnow().isoformat()}},
         )
 
+    async def mark_all_as_read(self, user_id: UUID) -> int:
+        result = await self._col.update_many(
+            {"user_id": str(user_id), "is_read": False},
+            {"$set": {"is_read": True, "read_at": datetime.utcnow().isoformat()}},
+        )
+        return result.modified_count
+
     def _to_document(self, n: Notification) -> dict:
         return {
             "_id": str(n.id),
