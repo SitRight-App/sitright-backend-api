@@ -3,33 +3,25 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Response
 
-from ...application.commands.change_password_handler import (
+from ...domain.model.commands.change_password_command import (
     ChangePasswordCommand,
-    ChangePasswordHandler,
     InvalidCurrentPasswordError,
 )
-from ...application.commands.mark_all_notifications_read_handler import (
+from ...domain.model.commands.mark_all_notifications_read_command import (
     MarkAllNotificationsReadCommand,
-    MarkAllNotificationsReadHandler,
 )
-from ...application.commands.mark_notification_read_handler import (
+from ...domain.model.commands.mark_notification_read_command import (
     MarkNotificationReadCommand,
-    MarkNotificationReadHandler,
 )
-from ...application.commands.update_profile_handler import (
-    UpdateProfileCommand,
-    UpdateProfileHandler,
-)
-from ...application.queries.count_unread_notifications_handler import (
-    CountUnreadNotificationsHandler,
+from ...domain.model.commands.update_profile_command import UpdateProfileCommand
+from ...domain.model.queries.count_unread_notifications_query import (
     CountUnreadNotificationsQuery,
 )
-from ...application.queries.get_user_handler import GetUserHandler, GetUserQuery
-from ...application.queries.list_notifications_handler import (
-    ListNotificationsHandler,
-    ListNotificationsQuery,
-)
+from ...domain.model.queries.get_user_query import GetUserQuery
+from ...domain.model.queries.list_notifications_query import ListNotificationsQuery
 from ...domain.services.token_service import TokenPayload
+from ...domain.services.user_command_service import IUserCommandService
+from ...domain.services.user_query_service import IUserQueryService
 from ..schemas.auth_schema import ChangePasswordRequest
 from ..schemas.user_schema import (
     AnthropometricSchema,
@@ -43,90 +35,30 @@ from .dependencies import get_current_user
 
 router = APIRouter(prefix="/api/v1/users", tags=["iam"])
 
-_get_user_handler: GetUserHandler | None = None
-_update_profile_handler: UpdateProfileHandler | None = None
-_list_notifications_handler: ListNotificationsHandler | None = None
-_count_unread_handler: CountUnreadNotificationsHandler | None = None
-_mark_read_handler: MarkNotificationReadHandler | None = None
-_mark_all_read_handler: MarkAllNotificationsReadHandler | None = None
-_change_password_handler: ChangePasswordHandler | None = None
+_user_command_service: IUserCommandService | None = None
+_user_query_service: IUserQueryService | None = None
 
 
-def set_change_password_handler(handler: ChangePasswordHandler) -> None:
-    global _change_password_handler
-    _change_password_handler = handler
+def set_user_command_service(service: IUserCommandService) -> None:
+    global _user_command_service
+    _user_command_service = service
 
 
-def get_change_password_handler() -> ChangePasswordHandler:
-    if _change_password_handler is None:
-        raise RuntimeError("ChangePasswordHandler no inicializado")
-    return _change_password_handler
+def set_user_query_service(service: IUserQueryService) -> None:
+    global _user_query_service
+    _user_query_service = service
 
 
-def set_get_user_handler(handler: GetUserHandler) -> None:
-    global _get_user_handler
-    _get_user_handler = handler
+def get_user_command_service() -> IUserCommandService:
+    if _user_command_service is None:
+        raise RuntimeError("UserCommandService no inicializado")
+    return _user_command_service
 
 
-def set_update_profile_handler(handler: UpdateProfileHandler) -> None:
-    global _update_profile_handler
-    _update_profile_handler = handler
-
-
-def set_list_notifications_handler(handler: ListNotificationsHandler) -> None:
-    global _list_notifications_handler
-    _list_notifications_handler = handler
-
-
-def set_count_unread_handler(handler: CountUnreadNotificationsHandler) -> None:
-    global _count_unread_handler
-    _count_unread_handler = handler
-
-
-def set_mark_read_handler(handler: MarkNotificationReadHandler) -> None:
-    global _mark_read_handler
-    _mark_read_handler = handler
-
-
-def set_mark_all_read_handler(handler: MarkAllNotificationsReadHandler) -> None:
-    global _mark_all_read_handler
-    _mark_all_read_handler = handler
-
-
-def get_get_user_handler() -> GetUserHandler:
-    if _get_user_handler is None:
-        raise RuntimeError("GetUserHandler no inicializado")
-    return _get_user_handler
-
-
-def get_update_profile_handler() -> UpdateProfileHandler:
-    if _update_profile_handler is None:
-        raise RuntimeError("UpdateProfileHandler no inicializado")
-    return _update_profile_handler
-
-
-def get_list_notifications_handler() -> ListNotificationsHandler:
-    if _list_notifications_handler is None:
-        raise RuntimeError("ListNotificationsHandler no inicializado")
-    return _list_notifications_handler
-
-
-def get_count_unread_handler() -> CountUnreadNotificationsHandler:
-    if _count_unread_handler is None:
-        raise RuntimeError("CountUnreadNotificationsHandler no inicializado")
-    return _count_unread_handler
-
-
-def get_mark_read_handler() -> MarkNotificationReadHandler:
-    if _mark_read_handler is None:
-        raise RuntimeError("MarkNotificationReadHandler no inicializado")
-    return _mark_read_handler
-
-
-def get_mark_all_read_handler() -> MarkAllNotificationsReadHandler:
-    if _mark_all_read_handler is None:
-        raise RuntimeError("MarkAllNotificationsReadHandler no inicializado")
-    return _mark_all_read_handler
+def get_user_query_service() -> IUserQueryService:
+    if _user_query_service is None:
+        raise RuntimeError("UserQueryService no inicializado")
+    return _user_query_service
 
 
 def _to_user_response(user) -> UserResponse:
@@ -153,9 +85,9 @@ def _to_user_response(user) -> UserResponse:
 @router.get("/me", response_model=UserResponse)
 async def get_me(
     current: Annotated[TokenPayload, Depends(get_current_user)],
-    handler: Annotated[GetUserHandler, Depends(get_get_user_handler)],
+    service: Annotated[IUserQueryService, Depends(get_user_query_service)],
 ) -> UserResponse:
-    user = await handler.execute(GetUserQuery(user_id=current.user_id))
+    user = await service.handle_get_user(GetUserQuery(user_id=current.user_id))
     if user is None:
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
     return _to_user_response(user)
@@ -165,7 +97,7 @@ async def get_me(
 async def update_me(
     request: UpdateProfileRequest,
     current: Annotated[TokenPayload, Depends(get_current_user)],
-    handler: Annotated[UpdateProfileHandler, Depends(get_update_profile_handler)],
+    service: Annotated[IUserCommandService, Depends(get_user_command_service)],
 ) -> UserResponse:
     command = UpdateProfileCommand(
         user_id=current.user_id,
@@ -178,7 +110,7 @@ async def update_me(
         language=request.language,
     )
     try:
-        user = await handler.execute(command)
+        user = await service.handle_update_profile(command)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     return _to_user_response(user)
@@ -188,11 +120,11 @@ async def update_me(
 async def change_my_password(
     request: ChangePasswordRequest,
     current: Annotated[TokenPayload, Depends(get_current_user)],
-    handler: Annotated[ChangePasswordHandler, Depends(get_change_password_handler)],
+    service: Annotated[IUserCommandService, Depends(get_user_command_service)],
 ) -> Response:
     """HU-28 — cambio de contraseña desde el perfil del usuario actual."""
     try:
-        await handler.execute(
+        await service.handle_change_password(
             ChangePasswordCommand(
                 user_id=current.user_id,
                 current_password=request.current_password,
@@ -200,7 +132,6 @@ async def change_my_password(
             )
         )
     except InvalidCurrentPasswordError as exc:
-        # AC2 — la contraseña actual es incorrecta.
         raise HTTPException(status_code=400, detail=str(exc))
     return Response(status_code=204)
 
@@ -211,23 +142,22 @@ async def change_my_password(
 )
 async def count_unread_my_notifications(
     current: Annotated[TokenPayload, Depends(get_current_user)],
-    handler: Annotated[
-        CountUnreadNotificationsHandler, Depends(get_count_unread_handler)
-    ],
+    service: Annotated[IUserQueryService, Depends(get_user_query_service)],
 ) -> UnreadNotificationsResponse:
-    """Devuelve el número de notificaciones sin leer del usuario, para el badge del topbar."""
-    count = await handler.execute(CountUnreadNotificationsQuery(user_id=current.user_id))
+    count = await service.handle_count_unread_notifications(
+        CountUnreadNotificationsQuery(user_id=current.user_id)
+    )
     return UnreadNotificationsResponse(count=count)
 
 
 @router.get("/me/notifications", response_model=list[NotificationResponse])
 async def list_my_notifications(
     current: Annotated[TokenPayload, Depends(get_current_user)],
-    handler: Annotated[ListNotificationsHandler, Depends(get_list_notifications_handler)],
+    service: Annotated[IUserQueryService, Depends(get_user_query_service)],
     limit: int = 20,
     offset: int = 0,
 ) -> list[NotificationResponse]:
-    notifs = await handler.execute(
+    notifs = await service.handle_list_notifications(
         ListNotificationsQuery(user_id=current.user_id, limit=limit, offset=offset)
     )
     return [
@@ -247,22 +177,22 @@ async def list_my_notifications(
 async def mark_my_notification_read(
     notification_id: UUID,
     _: Annotated[TokenPayload, Depends(get_current_user)],
-    handler: Annotated[
-        MarkNotificationReadHandler, Depends(get_mark_read_handler)
-    ],
+    service: Annotated[IUserCommandService, Depends(get_user_command_service)],
 ) -> Response:
     """Marca una notificación como leída. Idempotente."""
-    await handler.execute(MarkNotificationReadCommand(notification_id=notification_id))
+    await service.handle_mark_notification_read(
+        MarkNotificationReadCommand(notification_id=notification_id)
+    )
     return Response(status_code=204)
 
 
 @router.patch("/me/notifications/read-all")
 async def mark_all_my_notifications_read(
     current: Annotated[TokenPayload, Depends(get_current_user)],
-    handler: Annotated[
-        MarkAllNotificationsReadHandler, Depends(get_mark_all_read_handler)
-    ],
+    service: Annotated[IUserCommandService, Depends(get_user_command_service)],
 ) -> dict:
-    """Marca todas las notificaciones del usuario como leídas. Devuelve el conteo afectado."""
-    count = await handler.execute(MarkAllNotificationsReadCommand(user_id=current.user_id))
+    """Marca todas las notificaciones del usuario como leídas."""
+    count = await service.handle_mark_all_notifications_read(
+        MarkAllNotificationsReadCommand(user_id=current.user_id)
+    )
     return {"marked_as_read": count}

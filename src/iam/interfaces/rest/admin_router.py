@@ -3,17 +3,15 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 
-from ...application.commands.deactivate_user_handler import (
+from ...domain.model.commands.deactivate_user_command import (
     CannotDeactivateAdminError,
     DeactivateUserCommand,
-    DeactivateUserHandler,
 )
-from ...application.queries.get_admin_stats_handler import GetAdminStatsHandler
-from ...application.queries.list_users_handler import (
-    ListUsersHandler,
-    ListUsersQuery,
-)
+from ...domain.model.queries.get_admin_stats_query import GetAdminStatsQuery
+from ...domain.model.queries.list_users_query import ListUsersQuery
 from ...domain.services.token_service import TokenPayload
+from ...domain.services.user_command_service import IUserCommandService
+from ...domain.services.user_query_service import IUserQueryService
 from ..schemas.user_schema import (
     AnthropometricSchema,
     PreferencesSchema,
@@ -23,16 +21,24 @@ from .dependencies import require_admin
 
 router = APIRouter(prefix="/api/v1/admin", tags=["admin"])
 
-_list_users_handler: ListUsersHandler | None = None
-_admin_stats_handler: GetAdminStatsHandler | None = None
-_deactivate_user_handler: DeactivateUserHandler | None = None
-# HU-29 AC1 — adapters que enriquecen la lista de usuarios con su última
-# sesión y el estado del chaleco vinculado.
+_user_command_service: IUserCommandService | None = None
+_user_query_service: IUserQueryService | None = None
+# HU-29 AC1 — adapters que enriquecen la lista con última sesión y vest.
 _last_sessions_lookup = None  # type: ignore[var-annotated]
 _linked_vests_lookup = None  # type: ignore[var-annotated]
 
 
-def set_last_sessions_lookup(adapter) -> None:  # noqa: ANN001 — adapter duck-typed
+def set_user_command_service(service: IUserCommandService) -> None:
+    global _user_command_service
+    _user_command_service = service
+
+
+def set_user_query_service(service: IUserQueryService) -> None:
+    global _user_query_service
+    _user_query_service = service
+
+
+def set_last_sessions_lookup(adapter) -> None:  # noqa: ANN001
     global _last_sessions_lookup
     _last_sessions_lookup = adapter
 
@@ -42,54 +48,25 @@ def set_linked_vests_lookup(adapter) -> None:  # noqa: ANN001
     _linked_vests_lookup = adapter
 
 
-def set_deactivate_user_handler(handler: DeactivateUserHandler) -> None:
-    global _deactivate_user_handler
-    _deactivate_user_handler = handler
+def get_user_command_service() -> IUserCommandService:
+    if _user_command_service is None:
+        raise RuntimeError("UserCommandService no inicializado")
+    return _user_command_service
 
 
-def get_deactivate_user_handler() -> DeactivateUserHandler:
-    if _deactivate_user_handler is None:
-        raise RuntimeError("DeactivateUserHandler no inicializado")
-    return _deactivate_user_handler
-
-
-def set_list_users_handler(handler: ListUsersHandler) -> None:
-    global _list_users_handler
-    _list_users_handler = handler
-
-
-def set_admin_stats_handler(handler: GetAdminStatsHandler) -> None:
-    global _admin_stats_handler
-    _admin_stats_handler = handler
-
-
-def get_list_users_handler() -> ListUsersHandler:
-    if _list_users_handler is None:
-        raise RuntimeError("ListUsersHandler no inicializado")
-    return _list_users_handler
-
-
-def get_admin_stats_handler() -> GetAdminStatsHandler:
-    if _admin_stats_handler is None:
-        raise RuntimeError("GetAdminStatsHandler no inicializado")
-    return _admin_stats_handler
-
-
-class _UsersPageResponse(UserResponse):
-    pass
+def get_user_query_service() -> IUserQueryService:
+    if _user_query_service is None:
+        raise RuntimeError("UserQueryService no inicializado")
+    return _user_query_service
 
 
 @router.get("/stats", response_model=dict)
 async def get_admin_stats(
     _: Annotated[TokenPayload, Depends(require_admin)],
-    handler: Annotated[GetAdminStatsHandler, Depends(get_admin_stats_handler)],
+    service: Annotated[IUserQueryService, Depends(get_user_query_service)],
 ) -> dict:
-    """HU-22 AC1 — estadísticas globales de adopción para el panel admin.
-
-    Devuelve usuarios activos, sesiones totales y promedio de postura
-    adecuada general.
-    """
-    stats = await handler.execute()
+    """HU-22 AC1 — estadísticas globales de adopción para el panel admin."""
+    stats = await service.handle_get_admin_stats(GetAdminStatsQuery())
     return {
         "active_users": stats.active_users,
         "total_users": stats.total_users,
@@ -101,7 +78,7 @@ async def get_admin_stats(
 @router.get("/users", response_model=dict)
 async def list_users(
     _: Annotated[TokenPayload, Depends(require_admin)],
-    handler: Annotated[ListUsersHandler, Depends(get_list_users_handler)],
+    service: Annotated[IUserQueryService, Depends(get_user_query_service)],
     limit: int = Query(100, ge=1, le=500),
     offset: int = Query(0, ge=0),
 ) -> dict:
@@ -110,7 +87,7 @@ async def list_users(
     HU-29 AC1 — enriquecemos cada usuario con la última sesión registrada y
     el estado del chaleco vinculado para mostrarlos en la tabla.
     """
-    page = await handler.execute(ListUsersQuery(limit=limit, offset=offset))
+    page = await service.handle_list_users(ListUsersQuery(limit=limit, offset=offset))
 
     user_ids = [u.id for u in page.users]
     last_sessions = (
@@ -157,13 +134,12 @@ async def list_users(
 async def deactivate_user(
     user_id: UUID,
     _: Annotated[TokenPayload, Depends(require_admin)],
-    handler: Annotated[DeactivateUserHandler, Depends(get_deactivate_user_handler)],
+    service: Annotated[IUserCommandService, Depends(get_user_command_service)],
 ) -> Response:
     """HU-30 — desactivar una cuenta de usuario (solo admin, solo no-admin)."""
     try:
-        await handler.execute(DeactivateUserCommand(user_id=user_id))
+        await service.handle_deactivate_user(DeactivateUserCommand(user_id=user_id))
     except CannotDeactivateAdminError as exc:
-        # AC2 — intentar desactivar a otro admin
         raise HTTPException(status_code=400, detail=str(exc))
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc))

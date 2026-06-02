@@ -4,7 +4,11 @@ Se ejecuta en el lifespan del FastAPI app. Si las cuentas ya existen, no hace na
 """
 import logging
 
-from .commands.register_user_handler import RegisterUserCommand, RegisterUserHandler
+from ..domain.model.commands.register_user_command import (
+    RegisterUserCommand,
+    UserAlreadyExistsError,
+)
+from ..domain.services.user_command_service import IUserCommandService
 from ..domain.value_objects.role import Role
 
 log = logging.getLogger(__name__)
@@ -26,11 +30,11 @@ DEMO_USERS = [
 ]
 
 
-async def seed_demo_users(register_handler: RegisterUserHandler) -> None:
+async def seed_demo_users(service: IUserCommandService) -> None:
     """Crea las cuentas demo si no existen. Idempotente."""
     for spec in DEMO_USERS:
         try:
-            await register_handler.execute(
+            await service.handle_register(
                 RegisterUserCommand(
                     name=spec["name"],
                     email=spec["email"],
@@ -39,8 +43,7 @@ async def seed_demo_users(register_handler: RegisterUserHandler) -> None:
                 )
             )
             log.info("Cuenta demo creada: %s (%s)", spec["email"], spec["role"].value)
+        except UserAlreadyExistsError:
+            log.debug("Cuenta demo %s ya existía", spec["email"])
         except ValueError as exc:
-            if "ya está registrado" in str(exc):
-                log.debug("Cuenta demo %s ya existía", spec["email"])
-            else:
-                log.warning("No se pudo crear cuenta demo %s: %s", spec["email"], exc)
+            log.warning("No se pudo crear cuenta demo %s: %s", spec["email"], exc)
