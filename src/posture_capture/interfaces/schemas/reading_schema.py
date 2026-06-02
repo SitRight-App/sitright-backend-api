@@ -46,8 +46,8 @@ class SensorTriple(BaseModel):
 class LatestRawReadingResponse(BaseModel):
     """Última lectura con los valores crudos de los 3 sensores.
 
-    Usado por el flujo de calibración (HU-15) para muestrear la postura
-    actual del trabajador durante 5 segundos.
+    Usado por el flujo de calibración para muestrear la postura actual
+    del trabajador durante 5 segundos.
     """
 
     id: str

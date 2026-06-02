@@ -22,6 +22,11 @@ from ...domain.model.queries.list_notifications_query import ListNotificationsQu
 from ...domain.services.token_service import TokenPayload
 from ...domain.services.user_command_service import IUserCommandService
 from ...domain.services.user_query_service import IUserQueryService
+from ....shared.openapi_responses import (
+    NOT_FOUND_USER,
+    PYDANTIC_VALIDATION,
+    UNAUTHORIZED,
+)
 from ..schemas.auth_schema import ChangePasswordRequest
 from ..schemas.user_schema import (
     AnthropometricSchema,
@@ -82,7 +87,12 @@ def _to_user_response(user) -> UserResponse:
     )
 
 
-@router.get("/me", response_model=UserResponse)
+@router.get(
+    "/me",
+    response_model=UserResponse,
+    summary="Obtener mi perfil",
+    responses={200: {"description": "Perfil completo del usuario actual."}, **UNAUTHORIZED, **NOT_FOUND_USER},
+)
 async def get_me(
     current: Annotated[TokenPayload, Depends(get_current_user)],
     service: Annotated[IUserQueryService, Depends(get_user_query_service)],
@@ -93,7 +103,27 @@ async def get_me(
     return _to_user_response(user)
 
 
-@router.patch("/me", response_model=UserResponse)
+@router.patch(
+    "/me",
+    response_model=UserResponse,
+    summary="Actualizar mi perfil",
+    responses={
+        200: {"description": "Perfil actualizado."},
+        400: {
+            "description": (
+                "datos antropométricos fuera de rango razonable "
+                "(estatura 100-250 cm, peso 25-300 kg)."
+            ),
+            "content": {
+                "application/json": {
+                    "example": {"detail": "La estatura debe estar entre 100 y 250 cm"}
+                }
+            },
+        },
+        **UNAUTHORIZED,
+        **PYDANTIC_VALIDATION,
+    },
+)
 async def update_me(
     request: UpdateProfileRequest,
     current: Annotated[TokenPayload, Depends(get_current_user)],
@@ -116,13 +146,30 @@ async def update_me(
     return _to_user_response(user)
 
 
-@router.post("/me/password", status_code=204)
+@router.post(
+    "/me/password",
+    status_code=204,
+    summary="Cambiar mi contraseña",
+    responses={
+        204: {"description": "Contraseña actualizada."},
+        400: {
+            "description": "la contraseña actual proporcionada no coincide.",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "La contraseña actual es incorrecta"}
+                }
+            },
+        },
+        **UNAUTHORIZED,
+        **PYDANTIC_VALIDATION,
+    },
+)
 async def change_my_password(
     request: ChangePasswordRequest,
     current: Annotated[TokenPayload, Depends(get_current_user)],
     service: Annotated[IUserCommandService, Depends(get_user_command_service)],
 ) -> Response:
-    """HU-28 — cambio de contraseña desde el perfil del usuario actual."""
+    """cambio de contraseña desde el perfil del usuario actual."""
     try:
         await service.handle_change_password(
             ChangePasswordCommand(
@@ -139,6 +186,8 @@ async def change_my_password(
 @router.get(
     "/me/notifications/unread-count",
     response_model=UnreadNotificationsResponse,
+    summary="Contar notificaciones no leídas (badge del topbar)",
+    responses={200: {"content": {"application/json": {"example": {"count": 3}}}}, **UNAUTHORIZED},
 )
 async def count_unread_my_notifications(
     current: Annotated[TokenPayload, Depends(get_current_user)],
@@ -150,7 +199,12 @@ async def count_unread_my_notifications(
     return UnreadNotificationsResponse(count=count)
 
 
-@router.get("/me/notifications", response_model=list[NotificationResponse])
+@router.get(
+    "/me/notifications",
+    response_model=list[NotificationResponse],
+    summary="Listar mis notificaciones",
+    responses={200: {"description": "Notificaciones del usuario, ordenadas por `sent_at` descendente."}, **UNAUTHORIZED},
+)
 async def list_my_notifications(
     current: Annotated[TokenPayload, Depends(get_current_user)],
     service: Annotated[IUserQueryService, Depends(get_user_query_service)],
@@ -173,7 +227,12 @@ async def list_my_notifications(
     ]
 
 
-@router.patch("/me/notifications/{notification_id}/read", status_code=204)
+@router.patch(
+    "/me/notifications/{notification_id}/read",
+    status_code=204,
+    summary="Marcar una notificación como leída",
+    responses={204: {"description": "Idempotente — marcar dos veces no hace nada extra."}, **UNAUTHORIZED},
+)
 async def mark_my_notification_read(
     notification_id: UUID,
     _: Annotated[TokenPayload, Depends(get_current_user)],
@@ -186,7 +245,17 @@ async def mark_my_notification_read(
     return Response(status_code=204)
 
 
-@router.patch("/me/notifications/read-all")
+@router.patch(
+    "/me/notifications/read-all",
+    summary="Marcar todas mis notificaciones como leídas",
+    responses={
+        200: {
+            "content": {"application/json": {"example": {"marked_as_read": 5}}},
+            "description": "Conteo de notificaciones que pasaron de no-leídas a leídas.",
+        },
+        **UNAUTHORIZED,
+    },
+)
 async def mark_all_my_notifications_read(
     current: Annotated[TokenPayload, Depends(get_current_user)],
     service: Annotated[IUserCommandService, Depends(get_user_command_service)],

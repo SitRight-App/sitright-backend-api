@@ -18,12 +18,17 @@ from ..schemas.user_schema import (
     UserResponse,
 )
 from .dependencies import require_admin
+from ....shared.openapi_responses import (
+    FORBIDDEN_ADMIN_ONLY,
+    NOT_FOUND_USER,
+    UNAUTHORIZED,
+)
 
 router = APIRouter(prefix="/api/v1/admin", tags=["admin"])
 
 _user_command_service: IUserCommandService | None = None
 _user_query_service: IUserQueryService | None = None
-# HU-29 AC1 — adapters que enriquecen la lista con última sesión y vest.
+# adapters que enriquecen la lista con última sesión y vest.
 _last_sessions_lookup = None  # type: ignore[var-annotated]
 _linked_vests_lookup = None  # type: ignore[var-annotated]
 
@@ -60,12 +65,32 @@ def get_user_query_service() -> IUserQueryService:
     return _user_query_service
 
 
-@router.get("/stats", response_model=dict)
+@router.get(
+    "/stats",
+    response_model=dict,
+    summary="Métricas globales del piloto",
+    responses={
+        200: {
+            "content": {
+                "application/json": {
+                    "example": {
+                        "active_users": 12,
+                        "total_users": 15,
+                        "total_sessions": 247,
+                        "average_adequate_percentage": 68.4,
+                    }
+                }
+            }
+        },
+        **UNAUTHORIZED,
+        **FORBIDDEN_ADMIN_ONLY,
+    },
+)
 async def get_admin_stats(
     _: Annotated[TokenPayload, Depends(require_admin)],
     service: Annotated[IUserQueryService, Depends(get_user_query_service)],
 ) -> dict:
-    """HU-22 AC1 — estadísticas globales de adopción para el panel admin."""
+    """estadísticas globales de adopción para el panel admin."""
     stats = await service.handle_get_admin_stats(GetAdminStatsQuery())
     return {
         "active_users": stats.active_users,
@@ -75,7 +100,22 @@ async def get_admin_stats(
     }
 
 
-@router.get("/users", response_model=dict)
+@router.get(
+    "/users",
+    response_model=dict,
+    summary="Listar todos los usuarios con última sesión y chaleco",
+    responses={
+        200: {
+            "description": (
+                "Lista paginada de usuarios enriquecida con `last_session_at` "
+                "(timestamp del inicio de su última sesión) y `linked_vest` "
+                "(MAC + calibración, si tiene chaleco vinculado)."
+            )
+        },
+        **UNAUTHORIZED,
+        **FORBIDDEN_ADMIN_ONLY,
+    },
+)
 async def list_users(
     _: Annotated[TokenPayload, Depends(require_admin)],
     service: Annotated[IUserQueryService, Depends(get_user_query_service)],
@@ -84,7 +124,7 @@ async def list_users(
 ) -> dict:
     """Lista todos los usuarios del sistema (solo admin).
 
-    HU-29 AC1 — enriquecemos cada usuario con la última sesión registrada y
+    enriquecemos cada usuario con la última sesión registrada y
     el estado del chaleco vinculado para mostrarlos en la tabla.
     """
     page = await service.handle_list_users(ListUsersQuery(limit=limit, offset=offset))
@@ -130,13 +170,33 @@ async def list_users(
     }
 
 
-@router.patch("/users/{user_id}/deactivate", status_code=204)
+@router.patch(
+    "/users/{user_id}/deactivate",
+    status_code=204,
+    summary="Desactivar una cuenta de usuario",
+    responses={
+        204: {"description": "Usuario desactivado; no podrá iniciar sesión hasta ser reactivado."},
+        400: {
+            "description": "el objetivo es otra cuenta admin; no se permite desactivar admins desde esta vista.",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "detail": "No se puede desactivar una cuenta de administrador desde esta vista"
+                    }
+                }
+            },
+        },
+        **UNAUTHORIZED,
+        **FORBIDDEN_ADMIN_ONLY,
+        **NOT_FOUND_USER,
+    },
+)
 async def deactivate_user(
     user_id: UUID,
     _: Annotated[TokenPayload, Depends(require_admin)],
     service: Annotated[IUserCommandService, Depends(get_user_command_service)],
 ) -> Response:
-    """HU-30 — desactivar una cuenta de usuario (solo admin, solo no-admin)."""
+    """desactivar una cuenta de usuario (solo admin, solo no-admin)."""
     try:
         await service.handle_deactivate_user(DeactivateUserCommand(user_id=user_id))
     except CannotDeactivateAdminError as exc:

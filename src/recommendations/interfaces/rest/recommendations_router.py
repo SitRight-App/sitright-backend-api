@@ -29,6 +29,7 @@ from ..schemas.recommendation_schema import (
     RecommendationResponse,
     RecommendationStepResponse,
 )
+from ....shared.openapi_responses import UNAUTHORIZED
 
 router = APIRouter(prefix="/api/v1/recommendations", tags=["recommendations"])
 
@@ -80,7 +81,12 @@ def _to_response(r: Recommendation) -> RecommendationResponse:
 # antes que la ruta dinámica /{posture_class}.
 
 
-@router.get("/applied", response_model=list[AppliedRecommendationResponse])
+@router.get(
+    "/applied",
+    response_model=list[AppliedRecommendationResponse],
+    summary="Recomendaciones que ya marqué como aplicadas hoy",
+    responses={200: {"description": "Lista de aplicaciones del día UTC actual."}, **UNAUTHORIZED},
+)
 async def list_applied_today(
     current: Annotated[TokenPayload, Depends(get_current_user)],
     service: Annotated[IRecommendationQueryService, Depends(get_query_service)],
@@ -101,6 +107,19 @@ async def list_applied_today(
     "/{rec_id}/apply",
     status_code=201,
     response_model=AppliedRecommendationResponse,
+    summary="Marcar una recomendación como aplicada",
+    responses={
+        201: {"description": "Recomendación marcada (idempotente por usuario+recomendación+día)."},
+        404: {
+            "description": "La recomendación no existe en el catálogo.",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Recomendación 'foo' no existe en el catálogo"}
+                }
+            },
+        },
+        **UNAUTHORIZED,
+    },
 )
 async def mark_applied(
     rec_id: str,
@@ -121,7 +140,23 @@ async def mark_applied(
     )
 
 
-@router.delete("/{rec_id}/apply", status_code=204)
+@router.delete(
+    "/{rec_id}/apply",
+    status_code=204,
+    summary="Desmarcar una recomendación aplicada por error",
+    responses={
+        204: {"description": "Desmarcada para el día UTC actual."},
+        404: {
+            "description": "La recomendación no existe en el catálogo.",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Recomendación 'foo' no existe en el catálogo"}
+                }
+            },
+        },
+        **UNAUTHORIZED,
+    },
+)
 async def unmark_applied(
     rec_id: str,
     current: Annotated[TokenPayload, Depends(get_current_user)],
@@ -139,7 +174,12 @@ async def unmark_applied(
     return Response(status_code=204)
 
 
-@router.get("", response_model=list[RecommendationResponse])
+@router.get(
+    "",
+    response_model=list[RecommendationResponse],
+    summary="Catálogo completo de recomendaciones",
+    responses={200: {"description": "Vista `/recommendations` del web client."}, **UNAUTHORIZED},
+)
 async def list_recommendations(
     service: Annotated[IRecommendationQueryService, Depends(get_query_service)],
 ) -> list[RecommendationResponse]:
@@ -148,7 +188,25 @@ async def list_recommendations(
     return [_to_response(r) for r in recs]
 
 
-@router.get("/{posture_class}", response_model=list[RecommendationResponse])
+@router.get(
+    "/{posture_class}",
+    response_model=list[RecommendationResponse],
+    summary="Recomendaciones filtradas por clase postural",
+    responses={
+        200: {"description": "Subconjunto del catálogo aplicable a `posture_class`."},
+        400: {
+            "description": "Clase postural inválida (no está en `{adequate, forward_slouch, excessive_recline, indeterminate}`).",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "detail": "Clase postural inválida: 'foo'. Valores válidos: {'adequate', 'forward_slouch', 'excessive_recline', 'indeterminate'}"
+                    }
+                }
+            },
+        },
+        **UNAUTHORIZED,
+    },
+)
 async def get_recommendations(
     posture_class: str,
     service: Annotated[IRecommendationQueryService, Depends(get_query_service)],

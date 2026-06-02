@@ -7,6 +7,13 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 
 from ....iam.domain.services.token_service import TokenPayload
 from ....iam.interfaces.rest.dependencies import get_current_user
+from ....shared.openapi_responses import (
+    NOT_FOUND_NO_READINGS,
+    NOT_FOUND_VEST,
+    PYDANTIC_VALIDATION,
+    UNAUTHORIZED,
+    VALIDATION_ERROR,
+)
 from ....vest_management.domain.model.queries.get_my_vest_query import GetMyVestQuery
 from ....vest_management.domain.model.queries.get_vest_by_mac_query import (
     GetVestByMacQuery,
@@ -83,7 +90,41 @@ async def _resolve_user_vest_id(
     return str(vest.id)
 
 
-@router.post("", status_code=201, response_model=ReadingResponse)
+@router.post(
+    "",
+    status_code=201,
+    response_model=ReadingResponse,
+    summary="Recibir lectura del chaleco",
+    responses={
+        201: {
+            "description": "Lectura almacenada y clasificada por el ML service.",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "id": "550e8400-e29b-41d4-a716-446655440000",
+                        "posture_class": "forward_slouch",
+                        "confidence": 0.94,
+                    }
+                }
+            },
+        },
+        **VALIDATION_ERROR,
+        403: {
+            "description": (
+                "el chaleco identificado por `vest_id` (MAC) no "
+                "está vinculado a ningún usuario registrado."
+            ),
+            "content": {
+                "application/json": {
+                    "example": {
+                        "detail": "El chaleco no está vinculado a ningún usuario"
+                    }
+                }
+            },
+        },
+        **PYDANTIC_VALIDATION,
+    },
+)
 async def create_reading(
     request: ReadingRequest,
     command_service: Annotated[
@@ -91,7 +132,7 @@ async def create_reading(
     ],
     vest_service: Annotated[IVestQueryService, Depends(get_vest_query_service)],
 ) -> ReadingResponse:
-    # HU-02 AC3 — el identificador del chaleco debe estar vinculado.
+    # el identificador del chaleco debe estar vinculado.
     vest = await vest_service.handle_get_vest_by_mac(
         GetVestByMacQuery(mac_address=request.vest_id)
     )
@@ -125,7 +166,31 @@ async def create_reading(
     )
 
 
-@router.get("/latest", response_model=LatestReadingResponse)
+@router.get(
+    "/latest",
+    response_model=LatestReadingResponse,
+    summary="Última lectura del chaleco del usuario",
+    responses={
+        200: {
+            "description": "Lectura más reciente recibida del chaleco vinculado.",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "id": "550e8400-e29b-41d4-a716-446655440000",
+                        "vest_id": "AA:BB:CC:11:22:33",
+                        "posture_class": "adequate",
+                        "confidence": 0.92,
+                        "timestamp": "2026-06-02T14:30:15+00:00",
+                        "battery_percent": 78,
+                    }
+                }
+            },
+        },
+        **UNAUTHORIZED,
+        **NOT_FOUND_VEST,
+        **NOT_FOUND_NO_READINGS,
+    },
+)
 async def get_latest_reading(
     current: Annotated[TokenPayload, Depends(get_current_user)],
     query_service: Annotated[IPostureCaptureQueryService, Depends(get_query_service)],
@@ -148,13 +213,40 @@ async def get_latest_reading(
     )
 
 
-@router.get("/latest/raw", response_model=LatestRawReadingResponse)
+@router.get(
+    "/latest/raw",
+    response_model=LatestRawReadingResponse,
+    summary="Última lectura con sensores crudos para calibración",
+    responses={
+        200: {
+            "description": (
+                "Devuelve los valores ax/ay/az por sensor; el cliente promedia "
+                "un muestreo de 5 segundos para construir la referencia."
+            ),
+            "content": {
+                "application/json": {
+                    "example": {
+                        "id": "550e8400-e29b-41d4-a716-446655440000",
+                        "vest_id": "AA:BB:CC:11:22:33",
+                        "cervical": {"ax": 0.1, "ay": 0.2, "az": 9.8},
+                        "dorsal": {"ax": 0.05, "ay": 0.1, "az": 9.9},
+                        "lumbar": {"ax": 0.0, "ay": 0.15, "az": 9.7},
+                        "timestamp": "2026-06-02T14:30:15+00:00",
+                    }
+                }
+            },
+        },
+        **UNAUTHORIZED,
+        **NOT_FOUND_VEST,
+        **NOT_FOUND_NO_READINGS,
+    },
+)
 async def get_latest_raw_reading(
     current: Annotated[TokenPayload, Depends(get_current_user)],
     query_service: Annotated[IPostureCaptureQueryService, Depends(get_query_service)],
     vest_service: Annotated[IVestQueryService, Depends(get_vest_query_service)],
 ) -> LatestRawReadingResponse:
-    """Última lectura con sensores crudos — usada por la calibración (HU-15)."""
+    """Última lectura con sensores crudos — usada por la calibración."""
     vest_id = await _resolve_user_vest_id(current, vest_service)
     reading = await query_service.handle_get_latest_reading(
         GetLatestReadingQuery(vest_id=vest_id)
@@ -177,7 +269,36 @@ async def get_latest_raw_reading(
     )
 
 
-@router.get("/recent", response_model=list[TimelineReadingResponse])
+@router.get(
+    "/recent",
+    response_model=list[TimelineReadingResponse],
+    summary="Lecturas recientes del chaleco (timeline)",
+    responses={
+        200: {
+            "description": "Lecturas ordenadas ascendentemente por timestamp.",
+            "content": {
+                "application/json": {
+                    "example": [
+                        {
+                            "id": "550e8400-e29b-41d4-a716-446655440000",
+                            "posture_class": "adequate",
+                            "confidence": 0.94,
+                            "timestamp": "2026-06-02T14:25:00+00:00",
+                        },
+                        {
+                            "id": "550e8400-e29b-41d4-a716-446655440001",
+                            "posture_class": "forward_slouch",
+                            "confidence": 0.81,
+                            "timestamp": "2026-06-02T14:25:05+00:00",
+                        },
+                    ]
+                }
+            },
+        },
+        **UNAUTHORIZED,
+        **NOT_FOUND_VEST,
+    },
+)
 async def get_recent_readings(
     current: Annotated[TokenPayload, Depends(get_current_user)],
     query_service: Annotated[IPostureCaptureQueryService, Depends(get_query_service)],

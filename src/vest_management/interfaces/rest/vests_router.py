@@ -22,6 +22,12 @@ from ..schemas.vest_schema import (
     SendCommandRequest,
     VestResponse,
 )
+from ....shared.openapi_responses import (
+    FORBIDDEN_ADMIN_ONLY,
+    NOT_FOUND_VEST,
+    PYDANTIC_VALIDATION,
+    UNAUTHORIZED,
+)
 
 router = APIRouter(prefix="/api/v1/vests", tags=["vest_management"])
 
@@ -66,7 +72,22 @@ def _to_response(d: VestDevice) -> VestResponse:
     )
 
 
-@router.post("/register", status_code=201, response_model=VestResponse)
+@router.post(
+    "/register",
+    status_code=201,
+    response_model=VestResponse,
+    summary="Registrar un chaleco nuevo en el catálogo (solo admin)",
+    responses={
+        201: {"description": "Chaleco creado, aún no vinculado a ningún usuario."},
+        400: {
+            "description": "MAC con formato inválido o ya registrada.",
+            "content": {"application/json": {"example": {"detail": "MAC address inválida"}}},
+        },
+        **UNAUTHORIZED,
+        **FORBIDDEN_ADMIN_ONLY,
+        **PYDANTIC_VALIDATION,
+    },
+)
 async def register_vest(
     request: RegisterVestRequest,
     _: Annotated[TokenPayload, Depends(require_admin)],
@@ -84,7 +105,29 @@ async def register_vest(
     return _to_response(device)
 
 
-@router.post("/link", response_model=LinkVestResponse)
+@router.post(
+    "/link",
+    response_model=LinkVestResponse,
+    summary="Vincular un chaleco a mi cuenta",
+    responses={
+        200: {
+            "description": (
+                "Chaleco vinculado. Devuelve credenciales MQTT que el firmware "
+                "debe configurar (la contraseña no se vuelve a mostrar)."
+            )
+        },
+        400: {
+            "description": "Código de emparejamiento inválido, MAC no registrada, o ya vinculado a otro usuario.",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "El chaleco ya está vinculado a otro usuario"}
+                }
+            },
+        },
+        **UNAUTHORIZED,
+        **PYDANTIC_VALIDATION,
+    },
+)
 async def link_vest(
     request: LinkVestRequest,
     current: Annotated[TokenPayload, Depends(get_current_user)],
@@ -107,7 +150,29 @@ async def link_vest(
     )
 
 
-@router.post("/{vest_id}/calibrate", response_model=VestResponse)
+@router.post(
+    "/{vest_id}/calibrate",
+    response_model=VestResponse,
+    summary="Calibrar postura neutra",
+    responses={
+        200: {
+            "description": (
+                "Calibración almacenada. El cliente envía el promedio de 5 s "
+                "de muestreo previo de `/readings/latest/raw`."
+            )
+        },
+        400: {
+            "description": "Chaleco no encontrado o no vinculado.",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Solo se puede calibrar un chaleco vinculado"}
+                }
+            },
+        },
+        **UNAUTHORIZED,
+        **PYDANTIC_VALIDATION,
+    },
+)
 async def calibrate_vest(
     vest_id: UUID,
     request: CalibrateVestRequest,
@@ -128,7 +193,24 @@ async def calibrate_vest(
     return _to_response(device)
 
 
-@router.post("/{vest_id}/commands", status_code=202)
+@router.post(
+    "/{vest_id}/commands",
+    status_code=202,
+    summary="Enviar comando al firmware del chaleco vía MQTT (solo admin)",
+    responses={
+        202: {"content": {"application/json": {"example": {"status": "queued"}}}},
+        400: {
+            "description": (
+                "Comando desconocido o `firmware_version` faltante en "
+                "`firmware_update`."
+            ),
+            "content": {"application/json": {"example": {"detail": "Comando desconocido: foo"}}},
+        },
+        **UNAUTHORIZED,
+        **FORBIDDEN_ADMIN_ONLY,
+        **PYDANTIC_VALIDATION,
+    },
+)
 async def send_command(
     vest_id: UUID,
     request: SendCommandRequest,
@@ -148,7 +230,12 @@ async def send_command(
     return {"status": "queued"}
 
 
-@router.get("/me", response_model=VestResponse)
+@router.get(
+    "/me",
+    response_model=VestResponse,
+    summary="Obtener mi chaleco vinculado",
+    responses={200: {"description": "Datos del chaleco vinculado al usuario actual."}, **UNAUTHORIZED, **NOT_FOUND_VEST},
+)
 async def get_my_vest(
     current: Annotated[TokenPayload, Depends(get_current_user)],
     service: Annotated[IVestQueryService, Depends(get_query_service)],
@@ -159,7 +246,32 @@ async def get_my_vest(
     return _to_response(device)
 
 
-@router.post("/{vest_id}/unlink", response_model=VestResponse)
+@router.post(
+    "/{vest_id}/unlink",
+    response_model=VestResponse,
+    summary="Desvincular mi chaleco",
+    responses={
+        200: {
+            "description": (
+                "Chaleco desvinculado. Las lecturas históricas se conservan "
+                "asociadas al usuario (AC1)."
+            )
+        },
+        403: {
+            "description": "El chaleco pertenece a otro usuario.",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "El chaleco no pertenece al usuario actual"}
+                }
+            },
+        },
+        404: {
+            "description": "El chaleco no existe en el sistema.",
+            "content": {"application/json": {"example": {"detail": "Chaleco no encontrado"}}},
+        },
+        **UNAUTHORIZED,
+    },
+)
 async def unlink_vest(
     vest_id: UUID,
     current: Annotated[TokenPayload, Depends(get_current_user)],

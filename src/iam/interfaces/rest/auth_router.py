@@ -18,6 +18,7 @@ from ...domain.model.commands.request_password_reset_command import (
 from ...domain.services.token_service import TokenPayload
 from ...domain.services.user_command_service import IUserCommandService
 from ...domain.value_objects.role import Role
+from ....shared.openapi_responses import PYDANTIC_VALIDATION, UNAUTHORIZED
 from ..schemas.auth_schema import (
     ForgotPasswordRequest,
     LoginRequest,
@@ -71,7 +72,34 @@ def _to_user_response(user) -> UserResponse:
     )
 
 
-@router.post("/register", status_code=201, response_model=UserResponse)
+@router.post(
+    "/register",
+    status_code=201,
+    response_model=UserResponse,
+    summary="Registrar un nuevo trabajador",
+    responses={
+        201: {"description": "Cuenta creada exitosamente."},
+        400: {
+            "description": "Datos inválidos: rol desconocido, email mal formado o contraseña <8 caracteres.",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "detail": "La contraseña debe tener al menos 8 caracteres"
+                    }
+                }
+            },
+        },
+        409: {
+            "description": "El correo ya está registrado en el sistema.",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "El email ya está registrado"}
+                }
+            },
+        },
+        **PYDANTIC_VALIDATION,
+    },
+)
 async def register(
     request: RegisterRequest,
     service: Annotated[IUserCommandService, Depends(get_user_command_service)],
@@ -97,7 +125,46 @@ async def register(
     return _to_user_response(user)
 
 
-@router.post("/login", response_model=TokenResponse)
+@router.post(
+    "/login",
+    response_model=TokenResponse,
+    summary="Iniciar sesión con email y contraseña",
+    responses={
+        200: {
+            "description": "Credenciales válidas. Devuelve el par de tokens JWT.",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "access_token": "eyJhbGciOiJIUzI1NiIs...",
+                        "refresh_token": "eyJhbGciOiJIUzI1NiIs...",
+                        "token_type": "Bearer",
+                        "expires_in": 3600,
+                    }
+                }
+            },
+        },
+        401: {
+            "description": (
+                "mensaje genérico sin revelar si fue el email o "
+                "la contraseña la que falló."
+            ),
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Email o contraseña incorrectos"}
+                }
+            },
+        },
+        403: {
+            "description": "La cuenta fue desactivada por un administrador.",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "La cuenta está desactivada"}
+                }
+            },
+        },
+        **PYDANTIC_VALIDATION,
+    },
+)
 async def login(
     request: LoginRequest,
     service: Annotated[IUserCommandService, Depends(get_user_command_service)],
@@ -117,12 +184,32 @@ async def login(
     )
 
 
-@router.post("/forgot-password", status_code=202)
+@router.post(
+    "/forgot-password",
+    status_code=202,
+    summary="Solicitar recuperación de contraseña",
+    responses={
+        202: {
+            "description": (
+                "Solicitud aceptada. Respuesta uniforme por seguridad (AC2): no "
+                "se revela si el correo existe."
+            ),
+            "content": {
+                "application/json": {
+                    "example": {
+                        "message": "Te hemos enviado las instrucciones por correo"
+                    }
+                }
+            },
+        },
+        **PYDANTIC_VALIDATION,
+    },
+)
 async def forgot_password(
     request: ForgotPasswordRequest,
     service: Annotated[IUserCommandService, Depends(get_user_command_service)],
 ) -> dict:
-    """HU-27 — solicitar recuperación de contraseña.
+    """solicitar recuperación de contraseña.
 
     Responde siempre el mismo mensaje genérico para no permitir enumeración
     de cuentas (AC2). Si la cuenta existe, internamente queda registrado
@@ -134,11 +221,19 @@ async def forgot_password(
     return {"message": "Te hemos enviado las instrucciones por correo"}
 
 
-@router.post("/logout", status_code=204)
+@router.post(
+    "/logout",
+    status_code=204,
+    summary="Cerrar sesión del usuario actual",
+    responses={
+        204: {"description": "Logout aceptado. El cliente debe descartar los tokens locales."},
+        **UNAUTHORIZED,
+    },
+)
 async def logout(
     _: Annotated[TokenPayload, Depends(get_current_user)],
 ) -> Response:
-    """HU-25 AC1 — cierre de sesión.
+    """cierre de sesión.
 
     Los JWT son stateless: el "invalidar token" lo materializa el cliente
     descartando los tokens locales. El endpoint registra la intención del
@@ -147,7 +242,23 @@ async def logout(
     return Response(status_code=204)
 
 
-@router.post("/refresh", response_model=TokenResponse)
+@router.post(
+    "/refresh",
+    response_model=TokenResponse,
+    summary="Renovar tokens con un refresh token válido",
+    responses={
+        200: {"description": "Nuevo par de tokens emitido."},
+        401: {
+            "description": "Refresh token inválido o expirado.",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Token inválido: signature has expired"}
+                }
+            },
+        },
+        **PYDANTIC_VALIDATION,
+    },
+)
 async def refresh(
     request: RefreshTokenRequest,
     service: Annotated[IUserCommandService, Depends(get_user_command_service)],

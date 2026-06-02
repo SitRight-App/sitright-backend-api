@@ -22,6 +22,11 @@ from ..schemas.session_schema import (
     SessionSummaryResponse,
     StartSessionRequest,
 )
+from ....shared.openapi_responses import (
+    NOT_FOUND_SESSION,
+    PYDANTIC_VALIDATION,
+    UNAUTHORIZED,
+)
 
 router = APIRouter(prefix="/api/v1/sessions", tags=["session_history"])
 
@@ -76,7 +81,22 @@ def _to_response(s: PostureSession) -> SessionResponse:
     )
 
 
-@router.post("", status_code=201, response_model=SessionResponse)
+@router.post(
+    "",
+    status_code=201,
+    response_model=SessionResponse,
+    summary="Iniciar una sesión de uso del chaleco",
+    responses={
+        201: {
+            "description": (
+                "Sesión nueva creada. Si el usuario ya tenía una sesión activa, "
+                "devuelve esa misma (idempotente)."
+            )
+        },
+        **UNAUTHORIZED,
+        **PYDANTIC_VALIDATION,
+    },
+)
 async def start_session(
     request: StartSessionRequest,
     current: Annotated[TokenPayload, Depends(get_current_user)],
@@ -95,7 +115,23 @@ async def start_session(
     return _to_response(session)
 
 
-@router.post("/{session_id}/close", response_model=SessionResponse)
+@router.post(
+    "/{session_id}/close",
+    response_model=SessionResponse,
+    summary="Cerrar una sesión y calcular su resumen",
+    responses={
+        200: {
+            "description": (
+                "Sesión cerrada. El campo `summary` se calcula agregando todas "
+                "las lecturas asociadas (porcentaje adecuada, desviación dominante, "
+                "duración total, distribución por clase)."
+            )
+        },
+        **UNAUTHORIZED,
+        **NOT_FOUND_SESSION,
+        **PYDANTIC_VALIDATION,
+    },
+)
 async def close_session(
     session_id: UUID,
     request: CloseSessionRequest,
@@ -111,7 +147,19 @@ async def close_session(
     return _to_response(session)
 
 
-@router.get("/active", response_model=SessionResponse)
+@router.get(
+    "/active",
+    response_model=SessionResponse,
+    summary="Obtener mi sesión activa actual",
+    responses={
+        200: {"description": "Sesión en estado `active` para el usuario."},
+        404: {
+            "description": "No hay sesión activa para este usuario.",
+            "content": {"application/json": {"example": {"detail": "No tienes una sesión activa"}}},
+        },
+        **UNAUTHORIZED,
+    },
+)
 async def get_active(
     current: Annotated[TokenPayload, Depends(get_current_user)],
     service: Annotated[ISessionQueryService, Depends(get_query_service)],
@@ -124,7 +172,12 @@ async def get_active(
     return _to_response(session)
 
 
-@router.get("/{session_id}", response_model=SessionResponse)
+@router.get(
+    "/{session_id}",
+    response_model=SessionResponse,
+    summary="Obtener una sesión por id",
+    responses={200: {"description": "Detalle completo de la sesión."}, **UNAUTHORIZED, **NOT_FOUND_SESSION},
+)
 async def get_session(
     session_id: UUID,
     _: Annotated[TokenPayload, Depends(get_current_user)],
@@ -136,7 +189,21 @@ async def get_session(
     return _to_response(session)
 
 
-@router.get("", response_model=list[SessionResponse])
+@router.get(
+    "",
+    response_model=list[SessionResponse],
+    summary="Listar mis sesiones",
+    responses={
+        200: {
+            "description": (
+                "Sesiones del usuario ordenadas descendentemente por "
+                "`started_at`. Soporta filtros `since`/`until` para construir "
+                "la vista semanal."
+            )
+        },
+        **UNAUTHORIZED,
+    },
+)
 async def list_sessions(
     current: Annotated[TokenPayload, Depends(get_current_user)],
     service: Annotated[ISessionQueryService, Depends(get_query_service)],

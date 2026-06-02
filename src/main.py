@@ -211,11 +211,51 @@ async def lifespan(app: FastAPI):
     await disconnect_database()
 
 
+OPENAPI_TAGS = [
+    {
+        "name": "iam",
+        "description": "Identity & Access Management.",
+    },
+    {
+        "name": "admin",
+        "description": "Operaciones administrativas. Requiere rol `admin`.",
+    },
+    {
+        "name": "posture_capture",
+        "description": "Recepción de lecturas IMU del chaleco y consulta de las últimas/recientes.",
+    },
+    {
+        "name": "vest_management",
+        "description": "Ciclo de vida del chaleco: registro, vinculación, calibración, comandos.",
+    },
+    {
+        "name": "session_history",
+        "description": "Sesiones de uso y su resumen agregado.",
+    },
+    {
+        "name": "recommendations",
+        "description": "Catálogo de recomendaciones y marcado de aplicadas.",
+    },
+    {
+        "name": "health",
+        "description": "Liveness probe.",
+    },
+]
+
+
 app = FastAPI(
     title="SitRight Backend API",
-    description="API principal del sistema SitRight (FastAPI + MongoDB + MQTT)",
     version="1.0.0",
     lifespan=lifespan,
+    openapi_tags=OPENAPI_TAGS,
+    swagger_ui_parameters={
+        "defaultModelsExpandDepth": 0,
+        "docExpansion": "list",
+        "tagsSorter": "alpha",
+        "operationsSorter": "alpha",
+        "tryItOutEnabled": True,
+        "persistAuthorization": True,
+    },
 )
 
 app.add_middleware(
