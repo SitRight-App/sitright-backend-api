@@ -12,6 +12,9 @@ from ....domain.model.commands.unmark_recommendation_applied_command import (
 from ....domain.repositories.applied_recommendation_repository import (
     AppliedRecommendationRepository,
 )
+from ....domain.services.recommendation_command_service import (
+    IRecommendationCommandService,
+)
 from ...get_recommendations_handler import _CATALOG
 
 
@@ -23,7 +26,7 @@ def _ensure_exists(recommendation_id: str) -> None:
 
 
 @dataclass
-class RecommendationCommandService:
+class RecommendationCommandService(IRecommendationCommandService):
     applied_repository: AppliedRecommendationRepository
 
     async def handle_mark_applied(

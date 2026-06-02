@@ -13,11 +13,14 @@ from ....domain.model.queries.list_applied_recommendations_query import (
 from ....domain.repositories.applied_recommendation_repository import (
     AppliedRecommendationRepository,
 )
+from ....domain.services.recommendation_query_service import (
+    IRecommendationQueryService,
+)
 from ...get_recommendations_handler import _CATALOG, VALID_CLASSES, Recommendation
 
 
 @dataclass
-class RecommendationQueryService:
+class RecommendationQueryService(IRecommendationQueryService):
     applied_repository: AppliedRecommendationRepository
 
     async def handle_list_by_posture(

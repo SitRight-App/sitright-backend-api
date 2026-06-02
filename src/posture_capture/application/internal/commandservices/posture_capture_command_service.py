@@ -7,13 +7,16 @@ from ....domain.entities.posture_reading import PostureReading
 from ....domain.model.commands.save_reading_command import SaveReadingCommand
 from ....domain.repositories.posture_reading_repository import PostureReadingRepository
 from ....domain.services.ml_classifier_port import MLClassifierPort
+from ....domain.services.posture_capture_command_service import (
+    IPostureCaptureCommandService,
+)
 from ....domain.value_objects.sensor_data import SensorData
 
 logger = logging.getLogger(__name__)
 
 
 @dataclass
-class PostureCaptureCommandService:
+class PostureCaptureCommandService(IPostureCaptureCommandService):
     posture_reading_repository: PostureReadingRepository
     ml_classifier: MLClassifierPort
 

@@ -22,10 +22,11 @@ from ....domain.model.queries.list_notifications_query import ListNotificationsQ
 from ....domain.model.queries.list_users_query import ListUsersQuery, UsersPage
 from ....domain.repositories.notification_repository import NotificationRepository
 from ....domain.repositories.user_repository import UserRepository
+from ....domain.services.user_query_service import IUserQueryService
 
 
 @dataclass
-class UserQueryService:
+class UserQueryService(IUserQueryService):
     user_repository: UserRepository
     notification_repository: NotificationRepository
     session_stats: SessionStatsPort

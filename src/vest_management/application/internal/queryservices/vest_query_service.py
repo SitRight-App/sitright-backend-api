@@ -5,10 +5,11 @@ from ....domain.entities.vest_device import VestDevice
 from ....domain.model.queries.get_my_vest_query import GetMyVestQuery
 from ....domain.model.queries.get_vest_by_mac_query import GetVestByMacQuery
 from ....domain.repositories.vest_device_repository import VestDeviceRepository
+from ....domain.services.vest_query_service import IVestQueryService
 
 
 @dataclass
-class VestQueryService:
+class VestQueryService(IVestQueryService):
     vest_device_repository: VestDeviceRepository
 
     async def handle_get_my_vest(self, query: GetMyVestQuery) -> VestDevice | None:

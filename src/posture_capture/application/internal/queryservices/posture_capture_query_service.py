@@ -6,10 +6,13 @@ from ....domain.entities.posture_reading import PostureReading
 from ....domain.model.queries.get_latest_reading_query import GetLatestReadingQuery
 from ....domain.model.queries.get_recent_readings_query import GetRecentReadingsQuery
 from ....domain.repositories.posture_reading_repository import PostureReadingRepository
+from ....domain.services.posture_capture_query_service import (
+    IPostureCaptureQueryService,
+)
 
 
 @dataclass
-class PostureCaptureQueryService:
+class PostureCaptureQueryService(IPostureCaptureQueryService):
     posture_reading_repository: PostureReadingRepository
 
     async def handle_get_latest_reading(

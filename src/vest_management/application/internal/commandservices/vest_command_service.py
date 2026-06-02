@@ -15,6 +15,7 @@ from ....domain.model.commands.send_vest_command_command import SendVestCommand
 from ....domain.model.commands.unlink_vest_command import UnlinkVestCommand
 from ....domain.repositories.vest_device_repository import VestDeviceRepository
 from ....domain.services.vest_command_publisher import VestCommandPublisher
+from ....domain.services.vest_command_service import IVestCommandService
 from ....domain.value_objects.calibration_reference import CalibrationReference
 from ....domain.value_objects.mqtt_credentials import MqttCredentials
 from .....posture_capture.domain.value_objects.sensor_data import SensorData
@@ -32,7 +33,7 @@ def _generate_mqtt_username(mac: str) -> str:
 
 
 @dataclass
-class VestCommandService:
+class VestCommandService(IVestCommandService):
     vest_device_repository: VestDeviceRepository
     password_service: PasswordService
     vest_command_publisher: VestCommandPublisher | None = None

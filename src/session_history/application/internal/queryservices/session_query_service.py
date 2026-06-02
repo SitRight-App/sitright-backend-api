@@ -8,10 +8,11 @@ from ....domain.model.queries.get_session_query import (
 )
 from ....domain.model.queries.list_sessions_query import ListSessionsQuery
 from ....domain.repositories.session_repository import PostureSessionRepository
+from ....domain.services.session_query_service import ISessionQueryService
 
 
 @dataclass
-class SessionQueryService:
+class SessionQueryService(ISessionQueryService):
     session_repository: PostureSessionRepository
 
     async def handle_get_session(

@@ -47,6 +47,7 @@ from ....domain.repositories.notification_repository import NotificationReposito
 from ....domain.repositories.user_repository import UserRepository
 from ....domain.services.password_service import PasswordService
 from ....domain.services.token_service import TokenService
+from ....domain.services.user_command_service import IUserCommandService
 from ....domain.value_objects.anthropometric_data import AnthropometricData
 from ....domain.value_objects.preferences import Preferences
 from ....domain.value_objects.role import Role
@@ -56,7 +57,7 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass
-class UserCommandService:
+class UserCommandService(IUserCommandService):
     user_repository: UserRepository
     notification_repository: NotificationRepository
     password_service: PasswordService

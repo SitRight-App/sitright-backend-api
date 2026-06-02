@@ -8,10 +8,11 @@ from ....domain.model.commands.close_session_command import CloseSessionCommand
 from ....domain.model.commands.start_session_command import StartSessionCommand
 from ....domain.repositories.session_repository import PostureSessionRepository
 from ....domain.services.readings_aggregator import ReadingsAggregator
+from ....domain.services.session_command_service import ISessionCommandService
 
 
 @dataclass
-class SessionCommandService:
+class SessionCommandService(ISessionCommandService):
     session_repository: PostureSessionRepository
     readings_aggregator: ReadingsAggregator
 
