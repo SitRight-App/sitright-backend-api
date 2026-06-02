@@ -9,3 +9,7 @@ python-dotenv>=1.0.0
 python-jose[cryptography]>=3.3.0
 bcrypt>=4.2.0
 asyncio-mqtt>=0.16.2
+# asyncio-mqtt 0.16.2 todavía llama a paho_mqtt.Client.message_retry_set, que
+# fue eliminado en paho-mqtt 2.0. Lo dejamos pineado a la última 1.x hasta
+# migrar a aiomqtt (sucesor mantenido por sbtinstruments).
+paho-mqtt>=1.6,<2.0
