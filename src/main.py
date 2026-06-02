@@ -17,22 +17,22 @@ from .iam.infrastructure.security.bcrypt_password_service import BcryptPasswordS
 from .iam.infrastructure.security.jwt_token_service import JwtTokenService
 from .iam.interfaces.rest import admin_router, auth_router, users_router
 from .iam.interfaces.rest.dependencies import set_token_service
-from .posture_capture.application.commands.save_reading_handler import SaveReadingHandler
-from .posture_capture.application.queries.get_latest_reading_handler import (
-    GetLatestReadingHandler,
+from .posture_capture.application.internal.commandservices.posture_capture_command_service import (
+    PostureCaptureCommandService,
 )
-from .posture_capture.application.queries.get_recent_readings_handler import (
-    GetRecentReadingsHandler,
+from .posture_capture.application.internal.queryservices.posture_capture_query_service import (
+    PostureCaptureQueryService,
 )
 from .posture_capture.infrastructure.external.ml_client import MLServiceClient
 from .posture_capture.infrastructure.persistence.mongo_posture_reading_repository import (
     MongoPostureReadingRepository,
 )
 from .posture_capture.interfaces.rest import readings_router
-from .recommendations.application.applied_handlers import (
-    ListAppliedRecommendationsHandler,
-    MarkRecommendationAppliedHandler,
-    UnmarkRecommendationAppliedHandler,
+from .recommendations.application.internal.commandservices.recommendation_command_service import (
+    RecommendationCommandService,
+)
+from .recommendations.application.internal.queryservices.recommendation_query_service import (
+    RecommendationQueryService,
 )
 from .recommendations.infrastructure.persistence.mongo_applied_recommendation_repository import (
     MongoAppliedRecommendationRepository,
@@ -41,24 +41,20 @@ from .recommendations.interfaces.rest import recommendations_router as recommend
 from .recommendations.interfaces.rest.recommendations_router import (
     router as recommendations_router,
 )
-from .session_history.application.commands.close_session_handler import CloseSessionHandler
-from .session_history.application.commands.start_session_handler import StartSessionHandler
-from .session_history.application.queries.get_session_handler import (
-    GetActiveSessionHandler,
-    GetSessionHandler,
+from .session_history.application.internal.commandservices.session_command_service import (
+    SessionCommandService,
 )
-from .session_history.application.queries.list_sessions_handler import ListSessionsHandler
-from .session_history.infrastructure.external.readings_aggregator import (
-    MongoReadingsAggregator,
+from .session_history.application.internal.queryservices.session_query_service import (
+    SessionQueryService,
 )
 from .session_history.infrastructure.external.last_sessions_adapter import (
     MongoLastSessionsAdapter,
 )
+from .session_history.infrastructure.external.readings_aggregator import (
+    MongoReadingsAggregator,
+)
 from .session_history.infrastructure.external.session_stats_adapter import (
     MongoSessionStatsAdapter,
-)
-from .vest_management.infrastructure.external.linked_vests_adapter import (
-    MongoLinkedVestsAdapter,
 )
 from .session_history.infrastructure.persistence.mongo_session_repository import (
     MongoPostureSessionRepository,
@@ -67,20 +63,14 @@ from .session_history.interfaces.rest import sessions_router
 from .shared.adapters import SessionStarterAdapter, VestLookupAdapter
 from .shared.config import settings
 from .shared.database import connect_database, disconnect_database, get_database
-from .vest_management.application.commands.calibrate_vest_handler import (
-    CalibrateVestHandler,
+from .vest_management.application.internal.commandservices.vest_command_service import (
+    VestCommandService,
 )
-from .vest_management.application.commands.link_vest_handler import LinkVestHandler
-from .vest_management.application.commands.register_vest_handler import (
-    RegisterVestHandler,
+from .vest_management.application.internal.queryservices.vest_query_service import (
+    VestQueryService,
 )
-from .vest_management.application.commands.send_command_handler import (
-    SendVestCommandHandler,
-)
-from .vest_management.application.commands.unlink_vest_handler import UnlinkVestHandler
-from .vest_management.application.queries.get_my_vest_handler import GetMyVestHandler
-from .vest_management.application.queries.get_vest_by_mac_handler import (
-    GetVestByMacHandler,
+from .vest_management.infrastructure.external.linked_vests_adapter import (
+    MongoLinkedVestsAdapter,
 )
 from .vest_management.infrastructure.persistence.mongo_vest_device_repository import (
     MongoVestDeviceRepository,
@@ -108,8 +98,6 @@ async def lifespan(app: FastAPI):
     )
     set_token_service(token_service)
 
-    # Instancia única de los services de iam — los 3 routers (auth, users,
-    # admin) los comparten.
     user_command_service = UserCommandService(
         user_repository=user_repo,
         notification_repository=notif_repo,
@@ -121,7 +109,6 @@ async def lifespan(app: FastAPI):
         notification_repository=notif_repo,
         session_stats=MongoSessionStatsAdapter(db),
     )
-
     auth_router.set_user_command_service(user_command_service)
     users_router.set_user_command_service(user_command_service)
     users_router.set_user_query_service(user_query_service)
@@ -135,64 +122,58 @@ async def lifespan(app: FastAPI):
     # Seed idempotente de cuentas demo (worker + admin) para la sustentación.
     await seed_demo_users(user_command_service)
 
+    # ── Vest Management
+    vest_repo = MongoVestDeviceRepository(db)
+    vest_command_service = VestCommandService(
+        vest_device_repository=vest_repo,
+        password_service=password_service,
+        expected_pairing_code=settings.vest_pairing_code or None,
+    )
+    vest_query_service = VestQueryService(vest_device_repository=vest_repo)
+    vests_router.set_command_service(vest_command_service)
+    vests_router.set_query_service(vest_query_service)
+
     # ── Posture Capture
     posture_repo = MongoPostureReadingRepository(db)
     ml_client = MLServiceClient(settings.ml_service_url)
-    save_reading_handler = SaveReadingHandler(posture_repo, ml_client)
-    readings_router.set_handler(save_reading_handler)
-    readings_router.set_latest_handler(GetLatestReadingHandler(posture_repo))
-    readings_router.set_recent_handler(GetRecentReadingsHandler(posture_repo))
-    # readings_router necesita resolver el vest del usuario para filtrar,
-    # pero `vest_repo` aún no existe en este punto del lifespan; lo asignamos
-    # después de crear el repo de vest_management. (Ver más abajo.)
-
-    # ── Vest Management
-    vest_repo = MongoVestDeviceRepository(db)
-    vests_router.set_register_handler(RegisterVestHandler(vest_repo))
-    vests_router.set_link_handler(
-        LinkVestHandler(
-            vest_repo,
-            password_service,
-            expected_pairing_code=settings.vest_pairing_code or None,
-        )
+    posture_capture_command_service = PostureCaptureCommandService(
+        posture_reading_repository=posture_repo,
+        ml_classifier=ml_client,
     )
-    vests_router.set_calibrate_handler(CalibrateVestHandler(vest_repo))
-    get_my_vest_handler = GetMyVestHandler(vest_repo)
-    vests_router.set_get_my_vest_handler(get_my_vest_handler)
-    vests_router.set_unlink_handler(UnlinkVestHandler(vest_repo))
-    # Inyectamos el lookup del vest del usuario en readings_router para
-    # filtrar /readings/latest y /recent por chaleco vinculado.
-    readings_router.set_get_my_vest_handler(get_my_vest_handler)
-    # Lookup por MAC para validar 403 en POST /readings (HU-02 AC3).
-    readings_router.set_get_vest_by_mac_handler(GetVestByMacHandler(vest_repo))
-
-    # ── Recommendations (catálogo estático + persistencia de 'aplicadas')
-    applied_recs_repo = MongoAppliedRecommendationRepository(db)
-    recommendations_router_mod.set_mark_handler(
-        MarkRecommendationAppliedHandler(applied_recs_repo)
+    posture_capture_query_service = PostureCaptureQueryService(
+        posture_reading_repository=posture_repo
     )
-    recommendations_router_mod.set_unmark_handler(
-        UnmarkRecommendationAppliedHandler(applied_recs_repo)
-    )
-    recommendations_router_mod.set_list_applied_handler(
-        ListAppliedRecommendationsHandler(applied_recs_repo)
-    )
+    readings_router.set_command_service(posture_capture_command_service)
+    readings_router.set_query_service(posture_capture_query_service)
+    # readings_router necesita resolver el chaleco del usuario para filtrar
+    # /latest, /recent y /latest/raw, y validar 403 en POST por MAC (HU-02 AC3).
+    readings_router.set_vest_query_service(vest_query_service)
 
     # ── Session History
     session_repo = MongoPostureSessionRepository(db)
     aggregator = MongoReadingsAggregator(db)
-    start_session_handler = StartSessionHandler(session_repo)
-    sessions_router.set_start_handler(start_session_handler)
-    sessions_router.set_close_handler(CloseSessionHandler(session_repo, aggregator))
-    sessions_router.set_get_handler(GetSessionHandler(session_repo))
-    sessions_router.set_get_active_handler(GetActiveSessionHandler(session_repo))
-    sessions_router.set_list_handler(ListSessionsHandler(session_repo))
+    session_command_service = SessionCommandService(
+        session_repository=session_repo,
+        readings_aggregator=aggregator,
+    )
+    session_query_service = SessionQueryService(session_repository=session_repo)
+    sessions_router.set_command_service(session_command_service)
+    sessions_router.set_query_service(session_query_service)
+
+    # ── Recommendations (catálogo estático + persistencia de 'aplicadas')
+    applied_recs_repo = MongoAppliedRecommendationRepository(db)
+    recommendations_router_mod.set_command_service(
+        RecommendationCommandService(applied_repository=applied_recs_repo)
+    )
+    recommendations_router_mod.set_query_service(
+        RecommendationQueryService(applied_repository=applied_recs_repo)
+    )
 
     # ── MQTT (opcional, controlado por flag para que el dev local funcione sin broker)
     mqtt_subscriber = None
     if settings.mqtt_enabled and settings.mqtt_host:
         try:
-            from .shared.mqtt import connect_mqtt, disconnect_mqtt
+            from .shared.mqtt import connect_mqtt
             from .vest_management.infrastructure.external.mqtt_vest_command_publisher import (
                 MqttVestCommandPublisher,
             )
@@ -202,15 +183,15 @@ async def lifespan(app: FastAPI):
 
             mqtt_client = await connect_mqtt()
             mqtt_publisher = MqttVestCommandPublisher(mqtt_client)
-            vests_router.set_send_command_handler(
-                SendVestCommandHandler(vest_repo, mqtt_publisher)
-            )
+            # Inyectamos el publisher en el VestCommandService para que el
+            # caso de uso send_vest_command pueda publicar al broker.
+            vest_command_service.vest_command_publisher = mqtt_publisher
 
             mqtt_subscriber = PostureCaptureMqttSubscriber(
                 mqtt_client=mqtt_client,
-                save_handler=save_reading_handler,
+                command_service=posture_capture_command_service,
                 vest_lookup=VestLookupAdapter(vest_repo),
-                session_starter=SessionStarterAdapter(start_session_handler),
+                session_starter=SessionStarterAdapter(session_command_service),
             )
             await mqtt_subscriber.start()
         except Exception:

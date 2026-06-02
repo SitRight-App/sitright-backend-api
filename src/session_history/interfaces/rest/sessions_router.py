@@ -6,25 +6,16 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 
 from ....iam.domain.services.token_service import TokenPayload
 from ....iam.interfaces.rest.dependencies import get_current_user
-from ...application.commands.close_session_handler import (
-    CloseSessionCommand,
-    CloseSessionHandler,
-)
-from ...application.commands.start_session_handler import (
-    StartSessionCommand,
-    StartSessionHandler,
-)
-from ...application.queries.get_session_handler import (
-    GetActiveSessionHandler,
+from ...domain.entities.posture_session import PostureSession
+from ...domain.model.commands.close_session_command import CloseSessionCommand
+from ...domain.model.commands.start_session_command import StartSessionCommand
+from ...domain.model.queries.get_session_query import (
     GetActiveSessionQuery,
-    GetSessionHandler,
     GetSessionQuery,
 )
-from ...application.queries.list_sessions_handler import (
-    ListSessionsHandler,
-    ListSessionsQuery,
-)
-from ...domain.entities.posture_session import PostureSession
+from ...domain.model.queries.list_sessions_query import ListSessionsQuery
+from ...domain.services.session_command_service import ISessionCommandService
+from ...domain.services.session_query_service import ISessionQueryService
 from ..schemas.session_schema import (
     CloseSessionRequest,
     SessionResponse,
@@ -34,66 +25,30 @@ from ..schemas.session_schema import (
 
 router = APIRouter(prefix="/api/v1/sessions", tags=["session_history"])
 
-_start_handler: StartSessionHandler | None = None
-_close_handler: CloseSessionHandler | None = None
-_get_handler: GetSessionHandler | None = None
-_get_active_handler: GetActiveSessionHandler | None = None
-_list_handler: ListSessionsHandler | None = None
+_command_service: ISessionCommandService | None = None
+_query_service: ISessionQueryService | None = None
 
 
-def set_start_handler(h: StartSessionHandler) -> None:
-    global _start_handler
-    _start_handler = h
+def set_command_service(service: ISessionCommandService) -> None:
+    global _command_service
+    _command_service = service
 
 
-def set_close_handler(h: CloseSessionHandler) -> None:
-    global _close_handler
-    _close_handler = h
+def set_query_service(service: ISessionQueryService) -> None:
+    global _query_service
+    _query_service = service
 
 
-def set_get_handler(h: GetSessionHandler) -> None:
-    global _get_handler
-    _get_handler = h
+def get_command_service() -> ISessionCommandService:
+    if _command_service is None:
+        raise RuntimeError("SessionCommandService no inicializado")
+    return _command_service
 
 
-def set_get_active_handler(h: GetActiveSessionHandler) -> None:
-    global _get_active_handler
-    _get_active_handler = h
-
-
-def set_list_handler(h: ListSessionsHandler) -> None:
-    global _list_handler
-    _list_handler = h
-
-
-def get_start_handler() -> StartSessionHandler:
-    if _start_handler is None:
-        raise RuntimeError("StartSessionHandler no inicializado")
-    return _start_handler
-
-
-def get_close_handler() -> CloseSessionHandler:
-    if _close_handler is None:
-        raise RuntimeError("CloseSessionHandler no inicializado")
-    return _close_handler
-
-
-def get_get_handler() -> GetSessionHandler:
-    if _get_handler is None:
-        raise RuntimeError("GetSessionHandler no inicializado")
-    return _get_handler
-
-
-def get_get_active_handler() -> GetActiveSessionHandler:
-    if _get_active_handler is None:
-        raise RuntimeError("GetActiveSessionHandler no inicializado")
-    return _get_active_handler
-
-
-def get_list_handler() -> ListSessionsHandler:
-    if _list_handler is None:
-        raise RuntimeError("ListSessionsHandler no inicializado")
-    return _list_handler
+def get_query_service() -> ISessionQueryService:
+    if _query_service is None:
+        raise RuntimeError("SessionQueryService no inicializado")
+    return _query_service
 
 
 def _to_response(s: PostureSession) -> SessionResponse:
@@ -125,10 +80,10 @@ def _to_response(s: PostureSession) -> SessionResponse:
 async def start_session(
     request: StartSessionRequest,
     current: Annotated[TokenPayload, Depends(get_current_user)],
-    handler: Annotated[StartSessionHandler, Depends(get_start_handler)],
+    service: Annotated[ISessionCommandService, Depends(get_command_service)],
 ) -> SessionResponse:
     try:
-        session = await handler.execute(
+        session = await service.handle_start_session(
             StartSessionCommand(
                 user_id=current.user_id,
                 vest_device_id=UUID(request.vest_device_id),
@@ -145,10 +100,10 @@ async def close_session(
     session_id: UUID,
     request: CloseSessionRequest,
     _: Annotated[TokenPayload, Depends(get_current_user)],
-    handler: Annotated[CloseSessionHandler, Depends(get_close_handler)],
+    service: Annotated[ISessionCommandService, Depends(get_command_service)],
 ) -> SessionResponse:
     try:
-        session = await handler.execute(
+        session = await service.handle_close_session(
             CloseSessionCommand(session_id=session_id, note=request.note)
         )
     except ValueError as exc:
@@ -159,9 +114,11 @@ async def close_session(
 @router.get("/active", response_model=SessionResponse)
 async def get_active(
     current: Annotated[TokenPayload, Depends(get_current_user)],
-    handler: Annotated[GetActiveSessionHandler, Depends(get_get_active_handler)],
+    service: Annotated[ISessionQueryService, Depends(get_query_service)],
 ) -> SessionResponse:
-    session = await handler.execute(GetActiveSessionQuery(user_id=current.user_id))
+    session = await service.handle_get_active_session(
+        GetActiveSessionQuery(user_id=current.user_id)
+    )
     if session is None:
         raise HTTPException(status_code=404, detail="No tienes una sesión activa")
     return _to_response(session)
@@ -171,9 +128,9 @@ async def get_active(
 async def get_session(
     session_id: UUID,
     _: Annotated[TokenPayload, Depends(get_current_user)],
-    handler: Annotated[GetSessionHandler, Depends(get_get_handler)],
+    service: Annotated[ISessionQueryService, Depends(get_query_service)],
 ) -> SessionResponse:
-    session = await handler.execute(GetSessionQuery(session_id=session_id))
+    session = await service.handle_get_session(GetSessionQuery(session_id=session_id))
     if session is None:
         raise HTTPException(status_code=404, detail="Sesión no encontrada")
     return _to_response(session)
@@ -182,13 +139,13 @@ async def get_session(
 @router.get("", response_model=list[SessionResponse])
 async def list_sessions(
     current: Annotated[TokenPayload, Depends(get_current_user)],
-    handler: Annotated[ListSessionsHandler, Depends(get_list_handler)],
+    service: Annotated[ISessionQueryService, Depends(get_query_service)],
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
     since: datetime | None = None,
     until: datetime | None = None,
 ) -> list[SessionResponse]:
-    sessions = await handler.execute(
+    sessions = await service.handle_list_sessions(
         ListSessionsQuery(
             user_id=current.user_id,
             limit=limit,

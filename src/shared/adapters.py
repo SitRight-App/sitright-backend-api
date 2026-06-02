@@ -6,9 +6,11 @@ de otro.
 """
 from uuid import UUID
 
-from ..session_history.application.commands.start_session_handler import (
+from ..session_history.domain.model.commands.start_session_command import (
     StartSessionCommand,
-    StartSessionHandler,
+)
+from ..session_history.domain.services.session_command_service import (
+    ISessionCommandService,
 )
 from ..vest_management.domain.repositories.vest_device_repository import (
     VestDeviceRepository,
@@ -27,11 +29,11 @@ class VestLookupAdapter:
 
 
 class SessionStarterAdapter:
-    def __init__(self, start_handler: StartSessionHandler) -> None:
-        self._start_handler = start_handler
+    def __init__(self, session_command_service: ISessionCommandService) -> None:
+        self._service = session_command_service
 
     async def ensure_active(self, user_id: UUID, vest_device_id: UUID) -> UUID:
-        session = await self._start_handler.execute(
+        session = await self._service.handle_start_session(
             StartSessionCommand(user_id=user_id, vest_device_id=vest_device_id)
         )
         return session.id

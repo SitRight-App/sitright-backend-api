@@ -5,31 +5,15 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from ....iam.domain.services.token_service import TokenPayload
 from ....iam.interfaces.rest.dependencies import get_current_user, require_admin
-from ...application.commands.calibrate_vest_handler import (
-    CalibrateVestCommand,
-    CalibrateVestHandler,
-)
-from ...application.commands.link_vest_handler import (
-    LinkVestCommand,
-    LinkVestHandler,
-)
-from ...application.commands.register_vest_handler import (
-    RegisterVestCommand,
-    RegisterVestHandler,
-)
-from ...application.commands.send_command_handler import (
-    SendVestCommand,
-    SendVestCommandHandler,
-)
-from ...application.commands.unlink_vest_handler import (
-    UnlinkVestCommand,
-    UnlinkVestHandler,
-)
-from ...application.queries.get_my_vest_handler import (
-    GetMyVestHandler,
-    GetMyVestQuery,
-)
 from ...domain.entities.vest_device import VestDevice
+from ...domain.model.commands.calibrate_vest_command import CalibrateVestCommand
+from ...domain.model.commands.link_vest_command import LinkVestCommand
+from ...domain.model.commands.register_vest_command import RegisterVestCommand
+from ...domain.model.commands.send_vest_command_command import SendVestCommand
+from ...domain.model.commands.unlink_vest_command import UnlinkVestCommand
+from ...domain.model.queries.get_my_vest_query import GetMyVestQuery
+from ...domain.services.vest_command_service import IVestCommandService
+from ...domain.services.vest_query_service import IVestQueryService
 from ..schemas.vest_schema import (
     CalibrateVestRequest,
     LinkVestRequest,
@@ -41,78 +25,30 @@ from ..schemas.vest_schema import (
 
 router = APIRouter(prefix="/api/v1/vests", tags=["vest_management"])
 
-_register_handler: RegisterVestHandler | None = None
-_link_handler: LinkVestHandler | None = None
-_calibrate_handler: CalibrateVestHandler | None = None
-_send_command_handler: SendVestCommandHandler | None = None
-_get_my_vest_handler: GetMyVestHandler | None = None
-_unlink_handler: UnlinkVestHandler | None = None
+_command_service: IVestCommandService | None = None
+_query_service: IVestQueryService | None = None
 
 
-def set_register_handler(h: RegisterVestHandler) -> None:
-    global _register_handler
-    _register_handler = h
+def set_command_service(service: IVestCommandService) -> None:
+    global _command_service
+    _command_service = service
 
 
-def set_link_handler(h: LinkVestHandler) -> None:
-    global _link_handler
-    _link_handler = h
+def set_query_service(service: IVestQueryService) -> None:
+    global _query_service
+    _query_service = service
 
 
-def set_calibrate_handler(h: CalibrateVestHandler) -> None:
-    global _calibrate_handler
-    _calibrate_handler = h
+def get_command_service() -> IVestCommandService:
+    if _command_service is None:
+        raise RuntimeError("VestCommandService no inicializado")
+    return _command_service
 
 
-def set_send_command_handler(h: SendVestCommandHandler) -> None:
-    global _send_command_handler
-    _send_command_handler = h
-
-
-def set_get_my_vest_handler(h: GetMyVestHandler) -> None:
-    global _get_my_vest_handler
-    _get_my_vest_handler = h
-
-
-def set_unlink_handler(h: UnlinkVestHandler) -> None:
-    global _unlink_handler
-    _unlink_handler = h
-
-
-def get_register_handler() -> RegisterVestHandler:
-    if _register_handler is None:
-        raise RuntimeError("RegisterVestHandler no inicializado")
-    return _register_handler
-
-
-def get_link_handler() -> LinkVestHandler:
-    if _link_handler is None:
-        raise RuntimeError("LinkVestHandler no inicializado")
-    return _link_handler
-
-
-def get_calibrate_handler() -> CalibrateVestHandler:
-    if _calibrate_handler is None:
-        raise RuntimeError("CalibrateVestHandler no inicializado")
-    return _calibrate_handler
-
-
-def get_send_command_handler() -> SendVestCommandHandler:
-    if _send_command_handler is None:
-        raise RuntimeError("SendVestCommandHandler no inicializado")
-    return _send_command_handler
-
-
-def get_get_my_vest_handler() -> GetMyVestHandler:
-    if _get_my_vest_handler is None:
-        raise RuntimeError("GetMyVestHandler no inicializado")
-    return _get_my_vest_handler
-
-
-def get_unlink_handler() -> UnlinkVestHandler:
-    if _unlink_handler is None:
-        raise RuntimeError("UnlinkVestHandler no inicializado")
-    return _unlink_handler
+def get_query_service() -> IVestQueryService:
+    if _query_service is None:
+        raise RuntimeError("VestQueryService no inicializado")
+    return _query_service
 
 
 def _to_response(d: VestDevice) -> VestResponse:
@@ -134,10 +70,10 @@ def _to_response(d: VestDevice) -> VestResponse:
 async def register_vest(
     request: RegisterVestRequest,
     _: Annotated[TokenPayload, Depends(require_admin)],
-    handler: Annotated[RegisterVestHandler, Depends(get_register_handler)],
+    service: Annotated[IVestCommandService, Depends(get_command_service)],
 ) -> VestResponse:
     try:
-        device = await handler.execute(
+        device = await service.handle_register_vest(
             RegisterVestCommand(
                 mac_address=request.mac_address,
                 firmware_version=request.firmware_version,
@@ -152,10 +88,10 @@ async def register_vest(
 async def link_vest(
     request: LinkVestRequest,
     current: Annotated[TokenPayload, Depends(get_current_user)],
-    handler: Annotated[LinkVestHandler, Depends(get_link_handler)],
+    service: Annotated[IVestCommandService, Depends(get_command_service)],
 ) -> LinkVestResponse:
     try:
-        device, plain_password = await handler.execute(
+        device, plain_password = await service.handle_link_vest(
             LinkVestCommand(
                 mac_address=request.mac_address,
                 user_id=current.user_id,
@@ -176,10 +112,10 @@ async def calibrate_vest(
     vest_id: UUID,
     request: CalibrateVestRequest,
     _: Annotated[TokenPayload, Depends(get_current_user)],
-    handler: Annotated[CalibrateVestHandler, Depends(get_calibrate_handler)],
+    service: Annotated[IVestCommandService, Depends(get_command_service)],
 ) -> VestResponse:
     try:
-        device = await handler.execute(
+        device = await service.handle_calibrate_vest(
             CalibrateVestCommand(
                 device_id=vest_id,
                 cervical=request.cervical.as_tuple(),
@@ -197,10 +133,10 @@ async def send_command(
     vest_id: UUID,
     request: SendCommandRequest,
     _: Annotated[TokenPayload, Depends(require_admin)],
-    handler: Annotated[SendVestCommandHandler, Depends(get_send_command_handler)],
+    service: Annotated[IVestCommandService, Depends(get_command_service)],
 ) -> dict:
     try:
-        await handler.execute(
+        await service.handle_send_vest_command(
             SendVestCommand(
                 device_id=vest_id,
                 command_type=request.command_type,
@@ -215,9 +151,9 @@ async def send_command(
 @router.get("/me", response_model=VestResponse)
 async def get_my_vest(
     current: Annotated[TokenPayload, Depends(get_current_user)],
-    handler: Annotated[GetMyVestHandler, Depends(get_get_my_vest_handler)],
+    service: Annotated[IVestQueryService, Depends(get_query_service)],
 ) -> VestResponse:
-    device = await handler.execute(GetMyVestQuery(user_id=current.user_id))
+    device = await service.handle_get_my_vest(GetMyVestQuery(user_id=current.user_id))
     if device is None:
         raise HTTPException(status_code=404, detail="No tienes un chaleco vinculado")
     return _to_response(device)
@@ -227,11 +163,11 @@ async def get_my_vest(
 async def unlink_vest(
     vest_id: UUID,
     current: Annotated[TokenPayload, Depends(get_current_user)],
-    handler: Annotated[UnlinkVestHandler, Depends(get_unlink_handler)],
+    service: Annotated[IVestCommandService, Depends(get_command_service)],
 ) -> VestResponse:
     """Desvincula el chaleco del usuario actual. Solo el dueño puede ejecutarlo."""
     try:
-        device = await handler.execute(
+        device = await service.handle_unlink_vest(
             UnlinkVestCommand(vest_id=vest_id, user_id=current.user_id)
         )
     except ValueError as exc:

@@ -4,15 +4,25 @@ from fastapi import APIRouter, Depends, HTTPException, Response
 
 from ....iam.domain.services.token_service import TokenPayload
 from ....iam.interfaces.rest.dependencies import get_current_user
-from ...application.applied_handlers import (
-    ListAppliedRecommendationsHandler,
-    MarkRecommendationAppliedHandler,
-    UnmarkRecommendationAppliedHandler,
+from ...application.get_recommendations_handler import Recommendation
+from ...domain.model.commands.mark_recommendation_applied_command import (
+    MarkRecommendationAppliedCommand,
 )
-from ...application.get_recommendations_handler import (
-    GetAllRecommendationsHandler,
-    GetRecommendationsHandler,
-    Recommendation,
+from ...domain.model.commands.unmark_recommendation_applied_command import (
+    UnmarkRecommendationAppliedCommand,
+)
+from ...domain.model.queries.get_recommendations_query import (
+    GetRecommendationsByPostureQuery,
+    ListAllRecommendationsQuery,
+)
+from ...domain.model.queries.list_applied_recommendations_query import (
+    ListAppliedRecommendationsQuery,
+)
+from ...domain.services.recommendation_command_service import (
+    IRecommendationCommandService,
+)
+from ...domain.services.recommendation_query_service import (
+    IRecommendationQueryService,
 )
 from ..schemas.recommendation_schema import (
     AppliedRecommendationResponse,
@@ -22,45 +32,30 @@ from ..schemas.recommendation_schema import (
 
 router = APIRouter(prefix="/api/v1/recommendations", tags=["recommendations"])
 
-_handler = GetRecommendationsHandler()
-_list_handler = GetAllRecommendationsHandler()
-
-_mark_handler: MarkRecommendationAppliedHandler | None = None
-_unmark_handler: UnmarkRecommendationAppliedHandler | None = None
-_list_applied_handler: ListAppliedRecommendationsHandler | None = None
+_command_service: IRecommendationCommandService | None = None
+_query_service: IRecommendationQueryService | None = None
 
 
-def set_mark_handler(h: MarkRecommendationAppliedHandler) -> None:
-    global _mark_handler
-    _mark_handler = h
+def set_command_service(service: IRecommendationCommandService) -> None:
+    global _command_service
+    _command_service = service
 
 
-def set_unmark_handler(h: UnmarkRecommendationAppliedHandler) -> None:
-    global _unmark_handler
-    _unmark_handler = h
+def set_query_service(service: IRecommendationQueryService) -> None:
+    global _query_service
+    _query_service = service
 
 
-def set_list_applied_handler(h: ListAppliedRecommendationsHandler) -> None:
-    global _list_applied_handler
-    _list_applied_handler = h
+def get_command_service() -> IRecommendationCommandService:
+    if _command_service is None:
+        raise RuntimeError("RecommendationCommandService no inicializado")
+    return _command_service
 
 
-def get_mark_handler() -> MarkRecommendationAppliedHandler:
-    if _mark_handler is None:
-        raise RuntimeError("MarkRecommendationAppliedHandler no inicializado")
-    return _mark_handler
-
-
-def get_unmark_handler() -> UnmarkRecommendationAppliedHandler:
-    if _unmark_handler is None:
-        raise RuntimeError("UnmarkRecommendationAppliedHandler no inicializado")
-    return _unmark_handler
-
-
-def get_list_applied_handler() -> ListAppliedRecommendationsHandler:
-    if _list_applied_handler is None:
-        raise RuntimeError("ListAppliedRecommendationsHandler no inicializado")
-    return _list_applied_handler
+def get_query_service() -> IRecommendationQueryService:
+    if _query_service is None:
+        raise RuntimeError("RecommendationQueryService no inicializado")
+    return _query_service
 
 
 def _to_response(r: Recommendation) -> RecommendationResponse:
@@ -82,19 +77,18 @@ def _to_response(r: Recommendation) -> RecommendationResponse:
 
 
 # IMPORTANTE: las rutas estáticas /applied y /{rec_id}/apply deben declararse
-# antes que la ruta dinámica /{posture_class} para que FastAPI las matchee
-# primero.
+# antes que la ruta dinámica /{posture_class}.
 
 
 @router.get("/applied", response_model=list[AppliedRecommendationResponse])
 async def list_applied_today(
     current: Annotated[TokenPayload, Depends(get_current_user)],
-    handler: Annotated[
-        ListAppliedRecommendationsHandler, Depends(get_list_applied_handler)
-    ],
+    service: Annotated[IRecommendationQueryService, Depends(get_query_service)],
 ) -> list[AppliedRecommendationResponse]:
     """Lista las recomendaciones marcadas como aplicadas hoy por el usuario."""
-    applied = await handler.execute(current.user_id)
+    applied = await service.handle_list_applied(
+        ListAppliedRecommendationsQuery(user_id=current.user_id)
+    )
     return [
         AppliedRecommendationResponse(
             recommendation_id=a.recommendation_id, applied_at=a.applied_at
@@ -111,13 +105,15 @@ async def list_applied_today(
 async def mark_applied(
     rec_id: str,
     current: Annotated[TokenPayload, Depends(get_current_user)],
-    handler: Annotated[
-        MarkRecommendationAppliedHandler, Depends(get_mark_handler)
-    ],
+    service: Annotated[IRecommendationCommandService, Depends(get_command_service)],
 ) -> AppliedRecommendationResponse:
-    """Marca una recomendación como aplicada hoy. Idempotente por (usuario, recomendación, día)."""
+    """Marca una recomendación como aplicada hoy. Idempotente."""
     try:
-        applied = await handler.execute(current.user_id, rec_id)
+        applied = await service.handle_mark_applied(
+            MarkRecommendationAppliedCommand(
+                user_id=current.user_id, recommendation_id=rec_id
+            )
+        )
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
     return AppliedRecommendationResponse(
@@ -129,29 +125,39 @@ async def mark_applied(
 async def unmark_applied(
     rec_id: str,
     current: Annotated[TokenPayload, Depends(get_current_user)],
-    handler: Annotated[
-        UnmarkRecommendationAppliedHandler, Depends(get_unmark_handler)
-    ],
+    service: Annotated[IRecommendationCommandService, Depends(get_command_service)],
 ) -> Response:
     """Desmarca una recomendación previamente aplicada hoy."""
     try:
-        await handler.execute(current.user_id, rec_id)
+        await service.handle_unmark_applied(
+            UnmarkRecommendationAppliedCommand(
+                user_id=current.user_id, recommendation_id=rec_id
+            )
+        )
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
     return Response(status_code=204)
 
 
 @router.get("", response_model=list[RecommendationResponse])
-async def list_recommendations() -> list[RecommendationResponse]:
-    """Lista el catálogo completo de recomendaciones (página /recommendations)."""
-    return [_to_response(r) for r in _list_handler.execute()]
+async def list_recommendations(
+    service: Annotated[IRecommendationQueryService, Depends(get_query_service)],
+) -> list[RecommendationResponse]:
+    """Lista el catálogo completo de recomendaciones."""
+    recs = await service.handle_list_all(ListAllRecommendationsQuery())
+    return [_to_response(r) for r in recs]
 
 
 @router.get("/{posture_class}", response_model=list[RecommendationResponse])
-async def get_recommendations(posture_class: str) -> list[RecommendationResponse]:
-    """Recomendaciones aplicables a una clase postural específica (dashboard)."""
+async def get_recommendations(
+    posture_class: str,
+    service: Annotated[IRecommendationQueryService, Depends(get_query_service)],
+) -> list[RecommendationResponse]:
+    """Recomendaciones aplicables a una clase postural específica."""
     try:
-        recs = _handler.execute(posture_class)
+        recs = await service.handle_list_by_posture(
+            GetRecommendationsByPostureQuery(posture_class=posture_class)
+        )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     return [_to_response(r) for r in recs]

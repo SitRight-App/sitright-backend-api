@@ -5,23 +5,21 @@ from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-logger = logging.getLogger(__name__)
-
 from ....iam.domain.services.token_service import TokenPayload
 from ....iam.interfaces.rest.dependencies import get_current_user
-from ....vest_management.application.queries.get_my_vest_handler import (
-    GetMyVestHandler,
-    GetMyVestQuery,
-)
-from ....vest_management.application.queries.get_vest_by_mac_handler import (
-    GetVestByMacHandler,
+from ....vest_management.domain.model.queries.get_my_vest_query import GetMyVestQuery
+from ....vest_management.domain.model.queries.get_vest_by_mac_query import (
     GetVestByMacQuery,
 )
-from ...application.commands.save_reading_handler import SaveReadingCommand, SaveReadingHandler
-from ...application.queries.get_latest_reading_handler import GetLatestReadingHandler
-from ...application.queries.get_recent_readings_handler import (
-    GetRecentReadingsHandler,
-    GetRecentReadingsQuery,
+from ....vest_management.domain.services.vest_query_service import IVestQueryService
+from ...domain.model.commands.save_reading_command import SaveReadingCommand
+from ...domain.model.queries.get_latest_reading_query import GetLatestReadingQuery
+from ...domain.model.queries.get_recent_readings_query import GetRecentReadingsQuery
+from ...domain.services.posture_capture_command_service import (
+    IPostureCaptureCommandService,
+)
+from ...domain.services.posture_capture_query_service import (
+    IPostureCaptureQueryService,
 )
 from ..schemas.reading_schema import (
     LatestRawReadingResponse,
@@ -32,76 +30,54 @@ from ..schemas.reading_schema import (
     TimelineReadingResponse,
 )
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/api/v1/readings", tags=["posture_capture"])
 
-_handler: SaveReadingHandler | None = None
-_latest_handler: GetLatestReadingHandler | None = None
-_recent_handler: GetRecentReadingsHandler | None = None
-_get_my_vest_handler: GetMyVestHandler | None = None
-_get_vest_by_mac_handler: GetVestByMacHandler | None = None
+_command_service: IPostureCaptureCommandService | None = None
+_query_service: IPostureCaptureQueryService | None = None
+_vest_query_service: IVestQueryService | None = None
 
 
-def set_handler(handler: SaveReadingHandler) -> None:
-    global _handler
-    _handler = handler
+def set_command_service(service: IPostureCaptureCommandService) -> None:
+    global _command_service
+    _command_service = service
 
 
-def set_latest_handler(handler: GetLatestReadingHandler) -> None:
-    global _latest_handler
-    _latest_handler = handler
+def set_query_service(service: IPostureCaptureQueryService) -> None:
+    global _query_service
+    _query_service = service
 
 
-def set_recent_handler(handler: GetRecentReadingsHandler) -> None:
-    global _recent_handler
-    _recent_handler = handler
+def set_vest_query_service(service: IVestQueryService) -> None:
+    global _vest_query_service
+    _vest_query_service = service
 
 
-def set_get_my_vest_handler(handler: GetMyVestHandler) -> None:
-    global _get_my_vest_handler
-    _get_my_vest_handler = handler
+def get_command_service() -> IPostureCaptureCommandService:
+    if _command_service is None:
+        raise RuntimeError("PostureCaptureCommandService no inicializado")
+    return _command_service
 
 
-def set_get_vest_by_mac_handler(handler: GetVestByMacHandler) -> None:
-    global _get_vest_by_mac_handler
-    _get_vest_by_mac_handler = handler
+def get_query_service() -> IPostureCaptureQueryService:
+    if _query_service is None:
+        raise RuntimeError("PostureCaptureQueryService no inicializado")
+    return _query_service
 
 
-def get_handler() -> SaveReadingHandler:
-    if _handler is None:
-        raise RuntimeError("SaveReadingHandler not initialized")
-    return _handler
-
-
-def get_latest_handler() -> GetLatestReadingHandler:
-    if _latest_handler is None:
-        raise RuntimeError("GetLatestReadingHandler not initialized")
-    return _latest_handler
-
-
-def get_recent_handler() -> GetRecentReadingsHandler:
-    if _recent_handler is None:
-        raise RuntimeError("GetRecentReadingsHandler not initialized")
-    return _recent_handler
-
-
-def get_my_vest_handler() -> GetMyVestHandler:
-    if _get_my_vest_handler is None:
-        raise RuntimeError("GetMyVestHandler (readings_router) no inicializado")
-    return _get_my_vest_handler
-
-
-def get_vest_by_mac_handler() -> GetVestByMacHandler:
-    if _get_vest_by_mac_handler is None:
-        raise RuntimeError("GetVestByMacHandler (readings_router) no inicializado")
-    return _get_vest_by_mac_handler
+def get_vest_query_service() -> IVestQueryService:
+    if _vest_query_service is None:
+        raise RuntimeError("VestQueryService (readings_router) no inicializado")
+    return _vest_query_service
 
 
 async def _resolve_user_vest_id(
     current: TokenPayload,
-    vest_handler: GetMyVestHandler,
+    vest_service: IVestQueryService,
 ) -> str:
     """Devuelve el vest_id (str UUID) del chaleco del usuario o 404 si no tiene."""
-    vest = await vest_handler.execute(GetMyVestQuery(user_id=current.user_id))
+    vest = await vest_service.handle_get_my_vest(GetMyVestQuery(user_id=current.user_id))
     if vest is None or not vest.is_linked():
         raise HTTPException(status_code=404, detail="No tienes un chaleco vinculado")
     return str(vest.id)
@@ -110,12 +86,15 @@ async def _resolve_user_vest_id(
 @router.post("", status_code=201, response_model=ReadingResponse)
 async def create_reading(
     request: ReadingRequest,
-    handler: Annotated[SaveReadingHandler, Depends(get_handler)],
-    vest_lookup: Annotated[GetVestByMacHandler, Depends(get_vest_by_mac_handler)],
+    command_service: Annotated[
+        IPostureCaptureCommandService, Depends(get_command_service)
+    ],
+    vest_service: Annotated[IVestQueryService, Depends(get_vest_query_service)],
 ) -> ReadingResponse:
-    # HU-02 AC3 — el identificador del chaleco debe estar vinculado a un
-    # usuario. Si no, respondemos 403 y registramos el intento en logs.
-    vest = await vest_lookup.execute(GetVestByMacQuery(mac_address=request.vest_id))
+    # HU-02 AC3 — el identificador del chaleco debe estar vinculado.
+    vest = await vest_service.handle_get_vest_by_mac(
+        GetVestByMacQuery(mac_address=request.vest_id)
+    )
     if vest is None or not vest.is_linked():
         logger.warning(
             "[readings] intento de POST de chaleco no vinculado: vest_id=%s",
@@ -136,7 +115,7 @@ async def create_reading(
         battery_percent=request.battery_percent,
     )
     try:
-        reading = await handler.execute(command)
+        reading = await command_service.handle_save_reading(command)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     return ReadingResponse(
@@ -149,16 +128,14 @@ async def create_reading(
 @router.get("/latest", response_model=LatestReadingResponse)
 async def get_latest_reading(
     current: Annotated[TokenPayload, Depends(get_current_user)],
-    handler: Annotated[GetLatestReadingHandler, Depends(get_latest_handler)],
-    vest_handler: Annotated[GetMyVestHandler, Depends(get_my_vest_handler)],
+    query_service: Annotated[IPostureCaptureQueryService, Depends(get_query_service)],
+    vest_service: Annotated[IVestQueryService, Depends(get_vest_query_service)],
 ) -> LatestReadingResponse:
-    """Última lectura del chaleco vinculado al usuario autenticado.
-
-    Si el usuario no tiene chaleco vinculado, devuelve 404 — no exponemos
-    lecturas de otros chalecos.
-    """
-    vest_id = await _resolve_user_vest_id(current, vest_handler)
-    reading = await handler.execute(vest_id=vest_id)
+    """Última lectura del chaleco vinculado al usuario autenticado."""
+    vest_id = await _resolve_user_vest_id(current, vest_service)
+    reading = await query_service.handle_get_latest_reading(
+        GetLatestReadingQuery(vest_id=vest_id)
+    )
     if reading is None:
         raise HTTPException(status_code=404, detail="No hay lecturas registradas aún")
     return LatestReadingResponse(
@@ -174,24 +151,28 @@ async def get_latest_reading(
 @router.get("/latest/raw", response_model=LatestRawReadingResponse)
 async def get_latest_raw_reading(
     current: Annotated[TokenPayload, Depends(get_current_user)],
-    handler: Annotated[GetLatestReadingHandler, Depends(get_latest_handler)],
-    vest_handler: Annotated[GetMyVestHandler, Depends(get_my_vest_handler)],
+    query_service: Annotated[IPostureCaptureQueryService, Depends(get_query_service)],
+    vest_service: Annotated[IVestQueryService, Depends(get_vest_query_service)],
 ) -> LatestRawReadingResponse:
-    """Última lectura con sensores crudos — usada por la calibración (HU-15).
-
-    Devuelve los valores ax/ay/az de cervical, dorsal y lumbar para que el
-    cliente promedie un muestreo de 5 segundos y detecte movimiento.
-    """
-    vest_id = await _resolve_user_vest_id(current, vest_handler)
-    reading = await handler.execute(vest_id=vest_id)
+    """Última lectura con sensores crudos — usada por la calibración (HU-15)."""
+    vest_id = await _resolve_user_vest_id(current, vest_service)
+    reading = await query_service.handle_get_latest_reading(
+        GetLatestReadingQuery(vest_id=vest_id)
+    )
     if reading is None:
         raise HTTPException(status_code=404, detail="No hay lecturas registradas aún")
     return LatestRawReadingResponse(
         id=str(reading.id),
         vest_id=reading.vest_id,
-        cervical=SensorTriple(ax=reading.cervical.ax, ay=reading.cervical.ay, az=reading.cervical.az),
-        dorsal=SensorTriple(ax=reading.dorsal.ax, ay=reading.dorsal.ay, az=reading.dorsal.az),
-        lumbar=SensorTriple(ax=reading.lumbar.ax, ay=reading.lumbar.ay, az=reading.lumbar.az),
+        cervical=SensorTriple(
+            ax=reading.cervical.ax, ay=reading.cervical.ay, az=reading.cervical.az
+        ),
+        dorsal=SensorTriple(
+            ax=reading.dorsal.ax, ay=reading.dorsal.ay, az=reading.dorsal.az
+        ),
+        lumbar=SensorTriple(
+            ax=reading.lumbar.ax, ay=reading.lumbar.ay, az=reading.lumbar.az
+        ),
         timestamp=reading.timestamp.isoformat(),
     )
 
@@ -199,22 +180,16 @@ async def get_latest_raw_reading(
 @router.get("/recent", response_model=list[TimelineReadingResponse])
 async def get_recent_readings(
     current: Annotated[TokenPayload, Depends(get_current_user)],
-    handler: Annotated[GetRecentReadingsHandler, Depends(get_recent_handler)],
-    vest_handler: Annotated[GetMyVestHandler, Depends(get_my_vest_handler)],
+    query_service: Annotated[IPostureCaptureQueryService, Depends(get_query_service)],
+    vest_service: Annotated[IVestQueryService, Depends(get_vest_query_service)],
     limit: int = Query(60, ge=1, le=2000),
     minutes: int | None = Query(None, ge=1, le=1440),
     since: datetime | None = Query(None, description="ISO 8601 timestamp inclusivo"),
     until: datetime | None = Query(None, description="ISO 8601 timestamp inclusivo"),
 ) -> list[TimelineReadingResponse]:
-    """Devuelve las lecturas más recientes del chaleco vinculado, ordenadas ascendente por timestamp.
-
-    Modos de uso:
-    - Sin filtros: últimas `limit` lecturas.
-    - Con `minutes`: últimas N minutos.
-    - Con `since` y/o `until`: rango temporal arbitrario (útil para detalle de sesión).
-    """
-    vest_id = await _resolve_user_vest_id(current, vest_handler)
-    readings = await handler.execute(
+    """Devuelve las lecturas más recientes del chaleco vinculado."""
+    vest_id = await _resolve_user_vest_id(current, vest_service)
+    readings = await query_service.handle_get_recent_readings(
         GetRecentReadingsQuery(
             vest_id=vest_id, limit=limit, minutes=minutes, since=since, until=until
         )

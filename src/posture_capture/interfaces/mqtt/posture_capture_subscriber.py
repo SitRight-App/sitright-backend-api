@@ -7,9 +7,9 @@ from uuid import UUID, uuid4
 
 from asyncio_mqtt import Client as MqttClient, MqttError
 
-from ...application.commands.save_reading_handler import (
-    SaveReadingCommand,
-    SaveReadingHandler,
+from ...domain.model.commands.save_reading_command import SaveReadingCommand
+from ...domain.services.posture_capture_command_service import (
+    IPostureCaptureCommandService,
 )
 
 logger = logging.getLogger(__name__)
@@ -30,20 +30,20 @@ class SessionStarterPort(Protocol):
 class PostureCaptureMqttSubscriber:
     """Suscriptor MQTT al topic sitright/devices/+/readings.
 
-    Cada mensaje recibido se mapea a un SaveReadingCommand y se delega
-    al SaveReadingHandler (mismo caso de uso que el endpoint REST).
+    Cada mensaje recibido se mapea a un SaveReadingCommand y se delega al
+    PostureCaptureCommandService (mismo caso de uso que el endpoint REST).
     """
 
     def __init__(
         self,
         mqtt_client: MqttClient,
-        save_handler: SaveReadingHandler,
+        command_service: IPostureCaptureCommandService,
         vest_lookup: VestLookupPort,
         session_starter: SessionStarterPort,
         topic_pattern: str = "sitright/devices/+/readings",
     ) -> None:
         self._client = mqtt_client
-        self._save_handler = save_handler
+        self._command_service = command_service
         self._vest_lookup = vest_lookup
         self._session_starter = session_starter
         self._topic_pattern = topic_pattern
@@ -105,7 +105,7 @@ class PostureCaptureMqttSubscriber:
             timestamp=timestamp,
             battery_percent=int(data.get("battery_percent", 100)),
         )
-        await self._save_handler.execute(command)
+        await self._command_service.handle_save_reading(command)
 
     @staticmethod
     def _extract_mac(topic: str) -> str | None:
