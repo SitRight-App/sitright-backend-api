@@ -4,6 +4,8 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from .iam.application.commands.change_password_handler import ChangePasswordHandler
+from .iam.application.commands.deactivate_user_handler import DeactivateUserHandler
 from .iam.application.commands.login_handler import LoginHandler
 from .iam.application.commands.mark_all_notifications_read_handler import (
     MarkAllNotificationsReadHandler,
@@ -13,11 +15,15 @@ from .iam.application.commands.mark_notification_read_handler import (
 )
 from .iam.application.commands.refresh_token_handler import RefreshTokenHandler
 from .iam.application.commands.register_user_handler import RegisterUserHandler
+from .iam.application.commands.request_password_reset_handler import (
+    RequestPasswordResetHandler,
+)
 from .iam.application.commands.update_profile_handler import UpdateProfileHandler
 from .iam.application.seed_demo_users import seed_demo_users
 from .iam.application.queries.count_unread_notifications_handler import (
     CountUnreadNotificationsHandler,
 )
+from .iam.application.queries.get_admin_stats_handler import GetAdminStatsHandler
 from .iam.application.queries.get_user_handler import GetUserHandler
 from .iam.application.queries.list_notifications_handler import ListNotificationsHandler
 from .iam.application.queries.list_users_handler import ListUsersHandler
@@ -62,6 +68,9 @@ from .session_history.application.queries.get_session_handler import (
 from .session_history.application.queries.list_sessions_handler import ListSessionsHandler
 from .session_history.infrastructure.external.readings_aggregator import (
     MongoReadingsAggregator,
+)
+from .session_history.infrastructure.external.session_stats_adapter import (
+    MongoSessionStatsAdapter,
 )
 from .session_history.infrastructure.persistence.mongo_session_repository import (
     MongoPostureSessionRepository,
@@ -118,6 +127,10 @@ async def lifespan(app: FastAPI):
     # Seed idempotente de cuentas demo (worker + admin) para la sustentación
     await seed_demo_users(register_handler)
     auth_router.set_refresh_handler(RefreshTokenHandler(token_service))
+    auth_router.set_forgot_password_handler(RequestPasswordResetHandler(user_repo=user_repo))
+    users_router.set_change_password_handler(
+        ChangePasswordHandler(user_repo=user_repo, password_service=password_service)
+    )
     users_router.set_get_user_handler(GetUserHandler(user_repo))
     users_router.set_update_profile_handler(UpdateProfileHandler(user_repo))
     users_router.set_list_notifications_handler(ListNotificationsHandler(notif_repo))
@@ -125,6 +138,13 @@ async def lifespan(app: FastAPI):
     users_router.set_mark_read_handler(MarkNotificationReadHandler(notif_repo))
     users_router.set_mark_all_read_handler(MarkAllNotificationsReadHandler(notif_repo))
     admin_router.set_list_users_handler(ListUsersHandler(user_repo))
+    admin_router.set_admin_stats_handler(
+        GetAdminStatsHandler(
+            user_repo=user_repo,
+            session_stats=MongoSessionStatsAdapter(db),
+        )
+    )
+    admin_router.set_deactivate_user_handler(DeactivateUserHandler(user_repo=user_repo))
 
     # ── Posture Capture
     posture_repo = MongoPostureReadingRepository(db)

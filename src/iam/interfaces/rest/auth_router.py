@@ -1,6 +1,9 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
+
+from ...domain.services.token_service import TokenPayload
+from .dependencies import get_current_user
 
 from ...application.commands.login_handler import (
     InactiveAccountError,
@@ -16,8 +19,13 @@ from ...application.commands.register_user_handler import (
     RegisterUserCommand,
     RegisterUserHandler,
 )
+from ...application.commands.request_password_reset_handler import (
+    RequestPasswordResetCommand,
+    RequestPasswordResetHandler,
+)
 from ...domain.value_objects.role import Role
 from ..schemas.auth_schema import (
+    ForgotPasswordRequest,
     LoginRequest,
     RefreshTokenRequest,
     RegisterRequest,
@@ -34,6 +42,7 @@ router = APIRouter(prefix="/api/v1/auth", tags=["iam"])
 _register_handler: RegisterUserHandler | None = None
 _login_handler: LoginHandler | None = None
 _refresh_handler: RefreshTokenHandler | None = None
+_forgot_password_handler: RequestPasswordResetHandler | None = None
 
 
 def set_register_handler(handler: RegisterUserHandler) -> None:
@@ -51,10 +60,21 @@ def set_refresh_handler(handler: RefreshTokenHandler) -> None:
     _refresh_handler = handler
 
 
+def set_forgot_password_handler(handler: RequestPasswordResetHandler) -> None:
+    global _forgot_password_handler
+    _forgot_password_handler = handler
+
+
 def get_register_handler() -> RegisterUserHandler:
     if _register_handler is None:
         raise RuntimeError("RegisterUserHandler no inicializado")
     return _register_handler
+
+
+def get_forgot_password_handler() -> RequestPasswordResetHandler:
+    if _forgot_password_handler is None:
+        raise RuntimeError("RequestPasswordResetHandler no inicializado")
+    return _forgot_password_handler
 
 
 def get_login_handler() -> LoginHandler:
@@ -132,6 +152,37 @@ async def login(
         token_type=tokens.token_type,
         expires_in=tokens.expires_in,
     )
+
+
+@router.post("/forgot-password", status_code=202)
+async def forgot_password(
+    request: ForgotPasswordRequest,
+    handler: Annotated[RequestPasswordResetHandler, Depends(get_forgot_password_handler)],
+) -> dict:
+    """HU-27 — solicitar recuperación de contraseña.
+
+    Responde siempre el mismo mensaje genérico para no permitir enumeración
+    de cuentas (AC2). Si la cuenta existe, internamente queda registrado
+    para que un servicio de correo envíe el enlace (TTL 1 h, AC3).
+    """
+    await handler.execute(RequestPasswordResetCommand(email=request.email))
+    return {
+        "message": "Te hemos enviado las instrucciones por correo",
+    }
+
+
+@router.post("/logout", status_code=204)
+async def logout(
+    _: Annotated[TokenPayload, Depends(get_current_user)],
+) -> Response:
+    """HU-25 AC1 — cierre de sesión.
+
+    Los JWT son stateless: el "invalidar token" lo materializa el cliente
+    descartando los tokens locales. El endpoint registra la intención del
+    cierre (204) y permite que el frontend lo invoque de forma uniforme
+    desde cualquier pantalla.
+    """
+    return Response(status_code=204)
 
 
 @router.post("/refresh", response_model=TokenResponse)

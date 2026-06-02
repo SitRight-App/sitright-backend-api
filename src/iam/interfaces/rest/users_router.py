@@ -3,6 +3,11 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Response
 
+from ...application.commands.change_password_handler import (
+    ChangePasswordCommand,
+    ChangePasswordHandler,
+    InvalidCurrentPasswordError,
+)
 from ...application.commands.mark_all_notifications_read_handler import (
     MarkAllNotificationsReadCommand,
     MarkAllNotificationsReadHandler,
@@ -25,6 +30,7 @@ from ...application.queries.list_notifications_handler import (
     ListNotificationsQuery,
 )
 from ...domain.services.token_service import TokenPayload
+from ..schemas.auth_schema import ChangePasswordRequest
 from ..schemas.user_schema import (
     AnthropometricSchema,
     NotificationResponse,
@@ -43,6 +49,18 @@ _list_notifications_handler: ListNotificationsHandler | None = None
 _count_unread_handler: CountUnreadNotificationsHandler | None = None
 _mark_read_handler: MarkNotificationReadHandler | None = None
 _mark_all_read_handler: MarkAllNotificationsReadHandler | None = None
+_change_password_handler: ChangePasswordHandler | None = None
+
+
+def set_change_password_handler(handler: ChangePasswordHandler) -> None:
+    global _change_password_handler
+    _change_password_handler = handler
+
+
+def get_change_password_handler() -> ChangePasswordHandler:
+    if _change_password_handler is None:
+        raise RuntimeError("ChangePasswordHandler no inicializado")
+    return _change_password_handler
 
 
 def set_get_user_handler(handler: GetUserHandler) -> None:
@@ -164,6 +182,27 @@ async def update_me(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     return _to_user_response(user)
+
+
+@router.post("/me/password", status_code=204)
+async def change_my_password(
+    request: ChangePasswordRequest,
+    current: Annotated[TokenPayload, Depends(get_current_user)],
+    handler: Annotated[ChangePasswordHandler, Depends(get_change_password_handler)],
+) -> Response:
+    """HU-28 — cambio de contraseña desde el perfil del usuario actual."""
+    try:
+        await handler.execute(
+            ChangePasswordCommand(
+                user_id=current.user_id,
+                current_password=request.current_password,
+                new_password=request.new_password,
+            )
+        )
+    except InvalidCurrentPasswordError as exc:
+        # AC2 — la contraseña actual es incorrecta.
+        raise HTTPException(status_code=400, detail=str(exc))
+    return Response(status_code=204)
 
 
 @router.get(

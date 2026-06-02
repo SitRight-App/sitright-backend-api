@@ -39,6 +39,9 @@ class MongoUserRepository:
     async def count_all(self) -> int:
         return await self._col.count_documents({})
 
+    async def count_active(self) -> int:
+        return await self._col.count_documents({"is_active": True})
+
     def _to_document(self, user: User) -> dict:
         return {
             "_id": str(user.id),
