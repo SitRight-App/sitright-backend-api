@@ -243,8 +243,33 @@ OPENAPI_TAGS = [
 ]
 
 
+API_DESCRIPTION = """
+**SitRight** — sistema de monitoreo postural en tiempo real para trabajadores
+sedentarios mediante chaleco inteligente IoT.
+
+## Cuentas demo
+
+Sembradas idempotentemente al arrancar el servicio. Sirven para probar la
+API sin necesidad de crear una cuenta nueva.
+
+- **Trabajador**: `demo@sitright.app` / `Demo1234!`
+- **Administrador**: `admin@sitright.app` / `Admin1234!`
+
+## Autenticación
+
+La mayoría de endpoints requiere `Authorization: Bearer <access_token>`.
+
+1. Obtené el token con `POST /api/v1/auth/login`.
+2. Click en el botón **Authorize** arriba a la derecha y pegá solo el
+   `access_token` (Swagger agrega el prefijo `Bearer` automáticamente).
+3. Si el token caduca, renovalo con `POST /api/v1/auth/refresh` usando
+   el `refresh_token`.
+"""
+
+
 app = FastAPI(
     title="SitRight Backend API",
+    description=API_DESCRIPTION,
     version="1.0.0",
     lifespan=lifespan,
     openapi_tags=OPENAPI_TAGS,
