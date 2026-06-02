@@ -26,6 +26,20 @@ router = APIRouter(prefix="/api/v1/admin", tags=["admin"])
 _list_users_handler: ListUsersHandler | None = None
 _admin_stats_handler: GetAdminStatsHandler | None = None
 _deactivate_user_handler: DeactivateUserHandler | None = None
+# HU-29 AC1 — adapters que enriquecen la lista de usuarios con su última
+# sesión y el estado del chaleco vinculado.
+_last_sessions_lookup = None  # type: ignore[var-annotated]
+_linked_vests_lookup = None  # type: ignore[var-annotated]
+
+
+def set_last_sessions_lookup(adapter) -> None:  # noqa: ANN001 — adapter duck-typed
+    global _last_sessions_lookup
+    _last_sessions_lookup = adapter
+
+
+def set_linked_vests_lookup(adapter) -> None:  # noqa: ANN001
+    global _linked_vests_lookup
+    _linked_vests_lookup = adapter
 
 
 def set_deactivate_user_handler(handler: DeactivateUserHandler) -> None:
@@ -91,31 +105,51 @@ async def list_users(
     limit: int = Query(100, ge=1, le=500),
     offset: int = Query(0, ge=0),
 ) -> dict:
-    """Lista todos los usuarios del sistema (solo admin)."""
+    """Lista todos los usuarios del sistema (solo admin).
+
+    HU-29 AC1 — enriquecemos cada usuario con la última sesión registrada y
+    el estado del chaleco vinculado para mostrarlos en la tabla.
+    """
     page = await handler.execute(ListUsersQuery(limit=limit, offset=offset))
+
+    user_ids = [u.id for u in page.users]
+    last_sessions = (
+        await _last_sessions_lookup.get_last_session_by_user(user_ids)
+        if _last_sessions_lookup is not None
+        else {}
+    )
+    linked_vests = (
+        await _linked_vests_lookup.get_linked_vest_by_user(user_ids)
+        if _linked_vests_lookup is not None
+        else {}
+    )
+
+    def _serialize(u):  # noqa: ANN001
+        base = UserResponse(
+            id=str(u.id),
+            name=u.name,
+            email=u.email,
+            role=u.role.value,
+            is_active=u.is_active,
+            created_at=u.created_at,
+            anthropometric_data=AnthropometricSchema(
+                weight_kg=u.anthropometric_data.weight_kg,
+                height_cm=u.anthropometric_data.height_cm,
+            ),
+            preferences=PreferencesSchema(
+                email_notifications=u.preferences.email_notifications,
+                alert_threshold_minutes=u.preferences.alert_threshold_minutes,
+                break_reminder_minutes=u.preferences.break_reminder_minutes,
+                language=u.preferences.language,
+            ),
+        ).model_dump(mode="json")
+        base["last_session_at"] = last_sessions.get(u.id)
+        base["linked_vest"] = linked_vests.get(u.id)
+        return base
+
     return {
         "total": page.total,
-        "users": [
-            UserResponse(
-                id=str(u.id),
-                name=u.name,
-                email=u.email,
-                role=u.role.value,
-                is_active=u.is_active,
-                created_at=u.created_at,
-                anthropometric_data=AnthropometricSchema(
-                    weight_kg=u.anthropometric_data.weight_kg,
-                    height_cm=u.anthropometric_data.height_cm,
-                ),
-                preferences=PreferencesSchema(
-                    email_notifications=u.preferences.email_notifications,
-                    alert_threshold_minutes=u.preferences.alert_threshold_minutes,
-                    break_reminder_minutes=u.preferences.break_reminder_minutes,
-                    language=u.preferences.language,
-                ),
-            ).model_dump(mode="json")
-            for u in page.users
-        ],
+        "users": [_serialize(u) for u in page.users],
     }
 
 

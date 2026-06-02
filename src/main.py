@@ -69,8 +69,14 @@ from .session_history.application.queries.list_sessions_handler import ListSessi
 from .session_history.infrastructure.external.readings_aggregator import (
     MongoReadingsAggregator,
 )
+from .session_history.infrastructure.external.last_sessions_adapter import (
+    MongoLastSessionsAdapter,
+)
 from .session_history.infrastructure.external.session_stats_adapter import (
     MongoSessionStatsAdapter,
+)
+from .vest_management.infrastructure.external.linked_vests_adapter import (
+    MongoLinkedVestsAdapter,
 )
 from .session_history.infrastructure.persistence.mongo_session_repository import (
     MongoPostureSessionRepository,
@@ -145,6 +151,10 @@ async def lifespan(app: FastAPI):
         )
     )
     admin_router.set_deactivate_user_handler(DeactivateUserHandler(user_repo=user_repo))
+    # HU-29 AC1 — adapters de "última sesión" y "chaleco vinculado" para
+    # enriquecer la tabla del panel admin.
+    admin_router.set_last_sessions_lookup(MongoLastSessionsAdapter(db))
+    admin_router.set_linked_vests_lookup(MongoLinkedVestsAdapter(db))
 
     # ── Posture Capture
     posture_repo = MongoPostureReadingRepository(db)
