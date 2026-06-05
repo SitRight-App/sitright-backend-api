@@ -30,7 +30,7 @@ _CATALOG: tuple[Recommendation, ...] = (
     Recommendation(
         id="lumbar-flexor-stretch",
         number="№ 01",
-        title="Estiramiento de cadera flexora",
+        title="Estiramiento de flexor de cadera",
         description="Estiramiento de 90 segundos que relaja el psoas, principal responsable de inclinaciones pélvicas postprandiales.",
         category="lumbar",
         icon="lumbar-stretch",
@@ -38,10 +38,10 @@ _CATALOG: tuple[Recommendation, ...] = (
         posture_classes=("excessive_recline", "forward_slouch"),
         is_featured=True,
         featured_tagline="Recomendación del día · basada en tu lumbar",
-        featured_title_emphasis="de cadera flexora.",
+        featured_title_emphasis="de flexor de cadera",
         featured_body=(
             "Detectamos que tu zona lumbar acumuló minutos de desviación durante la "
-            "jornada. Este estiramiento de 90 segundos relaja el psoas — el principal "
+            "jornada. Este estiramiento de 90 segundos relaja el psoas, el principal "
             "responsable de inclinaciones pélvicas postprandiales."
         ),
         steps=(
@@ -95,7 +95,7 @@ _CATALOG: tuple[Recommendation, ...] = (
         id="cojin-lumbar",
         number="№ 06",
         title="Cojín lumbar de soporte",
-        description="Coloca un cojín o toalla enrollada en la curvatura lumbar entre vértebras L1—L5.",
+        description="Coloca un cojín o toalla enrollada en la curvatura lumbar entre vértebras L1 y L5.",
         category="lumbar",
         icon="lumbar-cushion",
         frequency_label="uso continuo",
@@ -138,7 +138,7 @@ _CATALOG: tuple[Recommendation, ...] = (
         description="Bebe 250ml de agua cada hora. La deshidratación reduce elasticidad muscular.",
         category="general",
         icon="hydration",
-        frequency_label="≈ 6—8 vasos / día",
+        frequency_label="≈ 6 a 8 vasos / día",
         posture_classes=("adequate", "forward_slouch", "excessive_recline"),
     ),
     Recommendation(
