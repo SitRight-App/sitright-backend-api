@@ -56,6 +56,9 @@ from .session_history.infrastructure.external.readings_aggregator import (
 from .session_history.infrastructure.external.session_stats_adapter import (
     MongoSessionStatsAdapter,
 )
+from .session_history.infrastructure.external.zone_analyzer import (
+    MongoZoneAnalyzer,
+)
 from .session_history.infrastructure.persistence.mongo_session_repository import (
     MongoPostureSessionRepository,
 )
@@ -156,7 +159,10 @@ async def lifespan(app: FastAPI):
         session_repository=session_repo,
         readings_aggregator=aggregator,
     )
-    session_query_service = SessionQueryService(session_repository=session_repo)
+    session_query_service = SessionQueryService(
+        session_repository=session_repo,
+        zone_analyzer=MongoZoneAnalyzer(db),
+    )
     sessions_router.set_command_service(session_command_service)
     sessions_router.set_query_service(session_query_service)
 

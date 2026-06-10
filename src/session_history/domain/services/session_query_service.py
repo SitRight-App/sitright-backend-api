@@ -1,9 +1,11 @@
 """Interfaz del servicio de queries para session_history."""
 from typing import Protocol
+from uuid import UUID
 
 from ..entities.posture_session import PostureSession
 from ..model.queries.get_session_query import GetActiveSessionQuery, GetSessionQuery
 from ..model.queries.list_sessions_query import ListSessionsQuery
+from ..value_objects.zone_analysis import SessionZoneAnalysis
 
 
 class ISessionQueryService(Protocol):
@@ -14,3 +16,6 @@ class ISessionQueryService(Protocol):
     async def handle_list_sessions(
         self, query: ListSessionsQuery
     ) -> list[PostureSession]: ...
+    async def handle_zone_analysis(
+        self, session_id: UUID
+    ) -> SessionZoneAnalysis | None: ...

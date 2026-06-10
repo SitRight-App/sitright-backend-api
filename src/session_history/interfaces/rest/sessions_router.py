@@ -21,6 +21,8 @@ from ..schemas.session_schema import (
     SessionResponse,
     SessionSummaryResponse,
     StartSessionRequest,
+    ZoneAnalysisResponse,
+    ZoneDeviationResponse,
 )
 from ....shared.openapi_responses import (
     NOT_FOUND_SESSION,
@@ -187,6 +189,48 @@ async def get_session(
     if session is None:
         raise HTTPException(status_code=404, detail="Sesión no encontrada")
     return _to_response(session)
+
+
+@router.get(
+    "/{session_id}/zone-analysis",
+    response_model=ZoneAnalysisResponse,
+    summary="Desviación postural por zona de una sesión",
+    responses={
+        200: {
+            "description": (
+                "Desviación de cada zona (cervical, dorsal, lumbar) calculada "
+                "geométricamente desde el sensor crudo vs. el neutro de "
+                "calibración. Independiente de la clase del modelo ML. Ver ADR-006."
+            )
+        },
+        **UNAUTHORIZED,
+        **NOT_FOUND_SESSION,
+    },
+)
+async def get_zone_analysis(
+    session_id: UUID,
+    _: Annotated[TokenPayload, Depends(get_current_user)],
+    service: Annotated[ISessionQueryService, Depends(get_query_service)],
+) -> ZoneAnalysisResponse:
+    analysis = await service.handle_zone_analysis(session_id)
+    if analysis is None:
+        raise HTTPException(status_code=404, detail="Sesión no encontrada")
+    return ZoneAnalysisResponse(
+        calibrated=analysis.calibrated,
+        threshold_degrees=analysis.threshold_degrees,
+        total_readings=analysis.total_readings,
+        zones={
+            zone: ZoneDeviationResponse(
+                deviated_pct=d.deviated_pct,
+                minutes_in_deviation=d.minutes_in_deviation,
+                avg_angle_deg=d.avg_angle_deg,
+                peak_angle_deg=d.peak_angle_deg,
+                longest_streak_min=d.longest_streak_min,
+                episodes=d.episodes,
+            )
+            for zone, d in analysis.zones.items()
+        },
+    )
 
 
 @router.get(

@@ -32,3 +32,21 @@ class SessionResponse(BaseModel):
     note: str | None
     duration_minutes: float | None
     summary: SessionSummaryResponse | None
+
+
+class ZoneDeviationResponse(BaseModel):
+    deviated_pct: float
+    minutes_in_deviation: float
+    avg_angle_deg: float
+    peak_angle_deg: float
+    longest_streak_min: float
+    episodes: int
+
+
+class ZoneAnalysisResponse(BaseModel):
+    """Desviación por zona derivada del sensor crudo vs. neutro de calibración (ADR-006)."""
+
+    calibrated: bool
+    threshold_degrees: float
+    total_readings: int
+    zones: dict[str, ZoneDeviationResponse]
