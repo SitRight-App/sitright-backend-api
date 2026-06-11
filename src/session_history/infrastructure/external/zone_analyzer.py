@@ -1,11 +1,11 @@
 """Analizador de desviación por zona sobre Mongo (ADR-006).
 
 Cruza el bounded context en modo lectura (igual que MongoReadingsAggregator):
-lee las lecturas crudas de `posture_readings` por chaleco + rango temporal de la
-sesión, y la referencia de calibración de `vest_devices`. Calcula la desviación
-de cada zona de forma geométrica, independiente de la clase del modelo ML.
+lee las lecturas crudas de `posture_readings` por `session_id`, y la referencia
+de calibración de `vest_devices`. Calcula la desviación de cada zona de forma
+geométrica, independiente de la clase del modelo ML.
 """
-from datetime import datetime, timezone
+from datetime import datetime
 from uuid import UUID
 
 from motor.motor_asyncio import AsyncIOMotorDatabase
@@ -33,7 +33,7 @@ class MongoZoneAnalyzer:
         self._vests = db["vest_devices"]
 
     async def analyze(
-        self, vest_device_id: UUID, started_at: datetime, ended_at: datetime | None
+        self, session_id: UUID, vest_device_id: UUID
     ) -> SessionZoneAnalysis:
         vest = await self._vests.find_one({"_id": str(vest_device_id)})
         cal = vest.get("calibration_reference") if vest else None
@@ -52,15 +52,12 @@ class MongoZoneAnalyzer:
             z: SensorData(cal[z]["ax"], cal[z]["ay"], cal[z]["az"]) for z in ZONES
         }
 
-        until = ended_at or datetime.now(timezone.utc)
-        query = {
-            "vest_id": vest["mac_address"],
-            "timestamp": {
-                "$gte": started_at.isoformat(),
-                "$lte": until.isoformat(),
-            },
-        }
-        cursor = self._readings.find(query).sort("timestamp", 1).limit(_MAX_READINGS)
+        # Lecturas de la sesión por session_id (clave estable, ADR-006).
+        cursor = (
+            self._readings.find({"session_id": str(session_id)})
+            .sort("timestamp", 1)
+            .limit(_MAX_READINGS)
+        )
 
         times: list[datetime] = []
         samples: dict[str, list[SensorData]] = {z: [] for z in ZONES}

@@ -5,6 +5,7 @@ from uuid import UUID
 from ..entities.posture_session import PostureSession
 from ..model.queries.get_session_query import GetActiveSessionQuery, GetSessionQuery
 from ..model.queries.list_sessions_query import ListSessionsQuery
+from ..value_objects.session_timeline import SessionTimelinePoint
 from ..value_objects.zone_analysis import SessionZoneAnalysis
 
 
@@ -19,3 +20,6 @@ class ISessionQueryService(Protocol):
     async def handle_zone_analysis(
         self, session_id: UUID
     ) -> SessionZoneAnalysis | None: ...
+    async def handle_session_readings(
+        self, session_id: UUID
+    ) -> list[SessionTimelinePoint]: ...

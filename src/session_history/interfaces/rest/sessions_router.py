@@ -20,6 +20,7 @@ from ..schemas.session_schema import (
     CloseSessionRequest,
     SessionResponse,
     SessionSummaryResponse,
+    SessionTimelineReadingResponse,
     StartSessionRequest,
     ZoneAnalysisResponse,
     ZoneDeviationResponse,
@@ -215,6 +216,42 @@ async def get_zone_analysis(
     analysis = await service.handle_zone_analysis(session_id)
     if analysis is None:
         raise HTTPException(status_code=404, detail="Sesión no encontrada")
+    return _zone_analysis_response(analysis)
+
+
+@router.get(
+    "/{session_id}/readings",
+    response_model=list[SessionTimelineReadingResponse],
+    summary="Lecturas de una sesión (para la línea de tiempo)",
+    responses={
+        200: {
+            "description": (
+                "Lecturas de la sesión identificadas por `session_id` (clave "
+                "estable), en orden cronológico. Alimentan la línea de tiempo y "
+                "las estadísticas del reporte."
+            )
+        },
+        **UNAUTHORIZED,
+    },
+)
+async def get_session_readings(
+    session_id: UUID,
+    _: Annotated[TokenPayload, Depends(get_current_user)],
+    service: Annotated[ISessionQueryService, Depends(get_query_service)],
+) -> list[SessionTimelineReadingResponse]:
+    points = await service.handle_session_readings(session_id)
+    return [
+        SessionTimelineReadingResponse(
+            id=p.reading_id,
+            posture_class=p.posture_class,
+            confidence=p.confidence,
+            timestamp=p.timestamp,
+        )
+        for p in points
+    ]
+
+
+def _zone_analysis_response(analysis) -> ZoneAnalysisResponse:
     return ZoneAnalysisResponse(
         calibrated=analysis.calibrated,
         threshold_degrees=analysis.threshold_degrees,

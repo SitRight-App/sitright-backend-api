@@ -89,7 +89,7 @@ class PostureCaptureMqttSubscriber:
             logger.warning("Payload no es JSON válido: %s", payload[:80])
             return
 
-        await self._session_starter.ensure_active(user_id, vest_id)
+        session_id = await self._session_starter.ensure_active(user_id, vest_id)
 
         timestamp_str = data.get("timestamp")
         timestamp = (
@@ -104,6 +104,7 @@ class PostureCaptureMqttSubscriber:
             lumbar=_triple(data.get("lumbar")),
             timestamp=timestamp,
             battery_percent=int(data.get("battery_percent", 100)),
+            session_id=session_id,
         )
         await self._command_service.handle_save_reading(command)
 

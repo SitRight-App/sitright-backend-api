@@ -1,7 +1,7 @@
 import logging
 from datetime import datetime, timezone
-from typing import Annotated
-from uuid import uuid4
+from typing import Annotated, Protocol
+from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
@@ -41,9 +41,22 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/readings", tags=["posture_capture"])
 
+
+class ActiveSessionLookupPort(Protocol):
+    """Resuelve la sesión activa del usuario para asociar la lectura (ADR-006)."""
+
+    async def active_session_id(self, user_id: UUID) -> UUID | None: ...
+
+
 _command_service: IPostureCaptureCommandService | None = None
 _query_service: IPostureCaptureQueryService | None = None
 _vest_query_service: IVestQueryService | None = None
+_active_session_lookup: ActiveSessionLookupPort | None = None
+
+
+def set_active_session_lookup(lookup: ActiveSessionLookupPort) -> None:
+    global _active_session_lookup
+    _active_session_lookup = lookup
 
 
 def set_command_service(service: IPostureCaptureCommandService) -> None:
@@ -146,6 +159,12 @@ async def create_reading(
             detail="El chaleco no está vinculado a ningún usuario",
         )
 
+    # Asocia la lectura a la sesión activa del usuario (si la hay): es la clave
+    # estable por la que el reporte agrupa las lecturas de la sesión (ADR-006).
+    session_id: UUID | None = None
+    if _active_session_lookup is not None and vest.user_id is not None:
+        session_id = await _active_session_lookup.active_session_id(vest.user_id)
+
     command = SaveReadingCommand(
         reading_id=uuid4(),
         vest_id=request.vest_id,
@@ -154,6 +173,7 @@ async def create_reading(
         lumbar=tuple(request.lumbar),
         timestamp=request.timestamp or datetime.now(timezone.utc),
         battery_percent=request.battery_percent,
+        session_id=session_id,
     )
     try:
         reading = await command_service.handle_save_reading(command)

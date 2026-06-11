@@ -1,5 +1,6 @@
 from datetime import datetime
 from typing import Protocol
+from uuid import UUID
 
 
 from ..entities.posture_reading import PostureReading
@@ -16,3 +17,4 @@ class PostureReadingRepository(Protocol):
         since: datetime | None = None,
         until: datetime | None = None,
     ) -> list[PostureReading]: ...
+    async def find_by_session(self, session_id: UUID) -> list[PostureReading]: ...

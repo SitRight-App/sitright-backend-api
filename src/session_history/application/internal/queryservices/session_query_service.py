@@ -10,7 +10,9 @@ from ....domain.model.queries.get_session_query import (
 from ....domain.model.queries.list_sessions_query import ListSessionsQuery
 from ....domain.repositories.session_repository import PostureSessionRepository
 from ....domain.services.session_query_service import ISessionQueryService
+from ....domain.services.session_readings_reader import SessionReadingsReader
 from ....domain.services.zone_analyzer import ZoneAnalyzer
+from ....domain.value_objects.session_timeline import SessionTimelinePoint
 from ....domain.value_objects.zone_analysis import SessionZoneAnalysis
 
 
@@ -18,6 +20,7 @@ from ....domain.value_objects.zone_analysis import SessionZoneAnalysis
 class SessionQueryService(ISessionQueryService):
     session_repository: PostureSessionRepository
     zone_analyzer: ZoneAnalyzer | None = None
+    readings_reader: SessionReadingsReader | None = None
 
     async def handle_get_session(
         self, query: GetSessionQuery
@@ -30,9 +33,14 @@ class SessionQueryService(ISessionQueryService):
         session = await self.session_repository.find_by_id(session_id)
         if session is None or self.zone_analyzer is None:
             return None
-        return await self.zone_analyzer.analyze(
-            session.vest_device_id, session.started_at, session.ended_at
-        )
+        return await self.zone_analyzer.analyze(session.id, session.vest_device_id)
+
+    async def handle_session_readings(
+        self, session_id: UUID
+    ) -> list[SessionTimelinePoint]:
+        if self.readings_reader is None:
+            return []
+        return await self.readings_reader.read_timeline(session_id)
 
     async def handle_get_active_session(
         self, query: GetActiveSessionQuery

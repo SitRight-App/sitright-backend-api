@@ -9,8 +9,14 @@ from uuid import UUID
 from ..session_history.domain.model.commands.start_session_command import (
     StartSessionCommand,
 )
+from ..session_history.domain.model.queries.get_session_query import (
+    GetActiveSessionQuery,
+)
 from ..session_history.domain.services.session_command_service import (
     ISessionCommandService,
+)
+from ..session_history.domain.services.session_query_service import (
+    ISessionQueryService,
 )
 from ..vest_management.domain.repositories.vest_device_repository import (
     VestDeviceRepository,
@@ -37,3 +43,17 @@ class SessionStarterAdapter:
             StartSessionCommand(user_id=user_id, vest_device_id=vest_device_id)
         )
         return session.id
+
+
+class ActiveSessionLookupAdapter:
+    """Resuelve la sesión activa del usuario (sin crearla) para asociar lecturas
+    capturadas vía REST a la sesión en curso. Satisface ActiveSessionLookupPort."""
+
+    def __init__(self, session_query_service: ISessionQueryService) -> None:
+        self._service = session_query_service
+
+    async def active_session_id(self, user_id: UUID) -> UUID | None:
+        session = await self._service.handle_get_active_session(
+            GetActiveSessionQuery(user_id=user_id)
+        )
+        return session.id if session else None

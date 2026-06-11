@@ -12,3 +12,4 @@ class SaveReadingCommand:
     lumbar: tuple[float, float, float]
     timestamp: datetime
     battery_percent: int = 100
+    session_id: UUID | None = None

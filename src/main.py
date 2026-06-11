@@ -56,6 +56,9 @@ from .session_history.infrastructure.external.readings_aggregator import (
 from .session_history.infrastructure.external.session_stats_adapter import (
     MongoSessionStatsAdapter,
 )
+from .session_history.infrastructure.external.session_readings_reader import (
+    MongoSessionReadingsReader,
+)
 from .session_history.infrastructure.external.zone_analyzer import (
     MongoZoneAnalyzer,
 )
@@ -63,7 +66,11 @@ from .session_history.infrastructure.persistence.mongo_session_repository import
     MongoPostureSessionRepository,
 )
 from .session_history.interfaces.rest import sessions_router
-from .shared.adapters import SessionStarterAdapter, VestLookupAdapter
+from .shared.adapters import (
+    ActiveSessionLookupAdapter,
+    SessionStarterAdapter,
+    VestLookupAdapter,
+)
 from .shared.config import settings
 from .shared.database import connect_database, disconnect_database, get_database
 from .vest_management.application.internal.commandservices.vest_command_service import (
@@ -162,9 +169,15 @@ async def lifespan(app: FastAPI):
     session_query_service = SessionQueryService(
         session_repository=session_repo,
         zone_analyzer=MongoZoneAnalyzer(db),
+        readings_reader=MongoSessionReadingsReader(db),
     )
     sessions_router.set_command_service(session_command_service)
     sessions_router.set_query_service(session_query_service)
+    # El POST de lecturas (REST) asocia cada lectura a la sesión activa del
+    # usuario, usando el query service de sesiones ya construido.
+    readings_router.set_active_session_lookup(
+        ActiveSessionLookupAdapter(session_query_service)
+    )
 
     # ── Recommendations (catálogo estático + persistencia de 'aplicadas')
     applied_recs_repo = MongoAppliedRecommendationRepository(db)

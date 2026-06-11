@@ -50,3 +50,12 @@ class ZoneAnalysisResponse(BaseModel):
     threshold_degrees: float
     total_readings: int
     zones: dict[str, ZoneDeviationResponse]
+
+
+class SessionTimelineReadingResponse(BaseModel):
+    """Forma ligera de una lectura para la línea de tiempo del reporte de sesión."""
+
+    id: str
+    posture_class: str
+    confidence: float
+    timestamp: str

@@ -29,6 +29,7 @@ class PostureCaptureCommandService(IPostureCaptureCommandService):
             lumbar=SensorData(*command.lumbar),
             timestamp=command.timestamp,
             battery_percent=command.battery_percent,
+            session_id=command.session_id,
         )
 
         try:
