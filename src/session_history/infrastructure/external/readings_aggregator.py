@@ -18,6 +18,22 @@ class MongoReadingsAggregator:
     def __init__(self, db: AsyncIOMotorDatabase) -> None:
         self._col = db["posture_readings"]
 
+    async def last_reading_at(self, session_id: UUID) -> datetime | None:
+        """Timestamp de la última lectura de la sesión (naive UTC, consistente
+        con `started_at`). Se usa para cerrar en la hora real, no la de pared."""
+        doc = await self._col.find_one(
+            {"session_id": str(session_id)},
+            sort=[("timestamp", -1)],
+            projection={"timestamp": 1},
+        )
+        ts_raw = doc.get("timestamp") if doc else None
+        if not ts_raw:
+            return None
+        try:
+            return datetime.fromisoformat(ts_raw).replace(tzinfo=None)
+        except (TypeError, ValueError):
+            return None
+
     async def aggregate_for_session(self, session_id: UUID) -> SessionSummary:
         cursor = self._col.find({"session_id": str(session_id)})
         counts: Counter[str] = Counter()
