@@ -19,6 +19,9 @@ class MongoPostureSessionRepository:
             upsert=True,
         )
 
+    async def delete(self, session_id: UUID) -> None:
+        await self._col.delete_one({"_id": str(session_id)})
+
     async def find_by_id(self, session_id: UUID) -> PostureSession | None:
         doc = await self._col.find_one({"_id": str(session_id)})
         return self._from_document(doc) if doc else None

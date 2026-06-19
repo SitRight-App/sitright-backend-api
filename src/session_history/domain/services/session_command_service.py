@@ -3,9 +3,11 @@ from typing import Protocol
 
 from ..entities.posture_session import PostureSession
 from ..model.commands.close_session_command import CloseSessionCommand
+from ..model.commands.delete_session_command import DeleteSessionCommand
 from ..model.commands.start_session_command import StartSessionCommand
 
 
 class ISessionCommandService(Protocol):
     async def handle_start_session(self, command: StartSessionCommand) -> PostureSession: ...
     async def handle_close_session(self, command: CloseSessionCommand) -> PostureSession: ...
+    async def handle_delete_session(self, command: DeleteSessionCommand) -> None: ...

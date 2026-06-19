@@ -5,6 +5,7 @@ from uuid import uuid4
 
 from ....domain.entities.posture_session import PostureSession
 from ....domain.model.commands.close_session_command import CloseSessionCommand
+from ....domain.model.commands.delete_session_command import DeleteSessionCommand
 from ....domain.model.commands.start_session_command import StartSessionCommand
 from ....domain.repositories.session_repository import PostureSessionRepository
 from ....domain.services.readings_aggregator import ReadingsAggregator
@@ -65,3 +66,10 @@ class SessionCommandService(ISessionCommandService):
             session.note = command.note
         await self.session_repository.save(session)
         return session
+
+    async def handle_delete_session(self, command: DeleteSessionCommand) -> None:
+        session = await self.session_repository.find_by_id(command.session_id)
+        # Una sesión ajena se trata como inexistente: no revelamos que existe.
+        if session is None or session.user_id != command.user_id:
+            raise ValueError("Sesión no encontrada")
+        await self.session_repository.delete(command.session_id)

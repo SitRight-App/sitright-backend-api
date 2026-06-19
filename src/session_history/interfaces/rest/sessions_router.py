@@ -8,6 +8,7 @@ from ....iam.domain.services.token_service import TokenPayload
 from ....iam.interfaces.rest.dependencies import get_current_user
 from ...domain.entities.posture_session import PostureSession
 from ...domain.model.commands.close_session_command import CloseSessionCommand
+from ...domain.model.commands.delete_session_command import DeleteSessionCommand
 from ...domain.model.commands.start_session_command import StartSessionCommand
 from ...domain.model.queries.get_session_query import (
     GetActiveSessionQuery,
@@ -148,6 +149,29 @@ async def close_session(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     return _to_response(session)
+
+
+@router.delete(
+    "/{session_id}",
+    status_code=204,
+    summary="Borrar una sesión del historial",
+    responses={
+        204: {"description": "Sesión borrada."},
+        **UNAUTHORIZED,
+        **NOT_FOUND_SESSION,
+    },
+)
+async def delete_session(
+    session_id: UUID,
+    current: Annotated[TokenPayload, Depends(get_current_user)],
+    service: Annotated[ISessionCommandService, Depends(get_command_service)],
+) -> None:
+    try:
+        await service.handle_delete_session(
+            DeleteSessionCommand(session_id=session_id, user_id=current.user_id)
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
 
 
 @router.get(
