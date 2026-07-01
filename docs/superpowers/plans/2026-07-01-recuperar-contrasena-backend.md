@@ -855,10 +855,17 @@ from .iam.infrastructure.persistence.mongo_password_reset_token_repository impor
     )
 ```
 
-- [ ] **Step 7: Correr TODA la suite (no debe romperse el arranque de la app)**
+- [ ] **Step 7: Verificar tests iam + que `main.py` importa (wiring válido)**
 
-Run: `python -m pytest -q`
-Expected: PASS — la suite completa (incluidos los tests de endpoints que arrancan `app` vía `TestClient`) sigue verde.
+Run: `./venv/Scripts/python.exe -m pytest tests/iam -q`
+Expected: PASS (todos los tests de `tests/iam`).
+
+Run: `./venv/Scripts/python.exe -c "import src.main"`
+Expected: sin error (importar `main` construye el objeto `app` pero NO corre el `lifespan`; valida que el wiring nuevo compila e importa).
+
+Nota de entorno: la suite de endpoints (`pytest -q` completo) arranca el `lifespan`,
+que se conecta a MongoDB (`seed_demo_users`). En este entorno no hay Mongo, así que
+esos tests se cuelgan y **no se corren aquí**; se validan con Mongo disponible en CI/dev.
 
 - [ ] **Step 8: Commit**
 
@@ -911,20 +918,21 @@ class _CmdServiceInvalid:
         raise InvalidResetTokenError("El enlace no es válido o expiró")
 
 
+# Nota: se usa TestClient(app) SIN context manager a propósito. El `with`
+# dispararía el lifespan (seed_demo_users -> MongoDB); sin él, no se conecta a
+# Mongo y el override del command service resuelve el endpoint igual.
 @pytest.fixture
 def client_ok():
     svc = _CmdServiceOK()
     app.dependency_overrides[auth_router.get_user_command_service] = lambda: svc
-    with TestClient(app) as c:
-        yield c, svc
+    yield TestClient(app), svc
     app.dependency_overrides.clear()
 
 
 @pytest.fixture
 def client_invalid():
     app.dependency_overrides[auth_router.get_user_command_service] = lambda: _CmdServiceInvalid()
-    with TestClient(app) as c:
-        yield c
+    yield TestClient(app)
     app.dependency_overrides.clear()
 
 
@@ -1011,10 +1019,13 @@ async def reset_password(
 Run: `python -m pytest tests/iam/test_reset_password_endpoint.py -v`
 Expected: PASS (3 passed).
 
-- [ ] **Step 6: Correr toda la suite**
+- [ ] **Step 6: Correr los tests iam**
 
-Run: `python -m pytest -q`
-Expected: PASS (toda la suite verde).
+Run: `./venv/Scripts/python.exe -m pytest tests/iam -q`
+Expected: PASS (todos los tests de `tests/iam`, incluido el nuevo del endpoint).
+
+Nota: la suite de endpoints completa (`pytest -q`) requiere MongoDB por el `lifespan`;
+no se corre en este entorno (ver nota en Task 4).
 
 - [ ] **Step 7: Commit**
 
