@@ -15,6 +15,10 @@ from ...domain.model.commands.register_user_command import (
 from ...domain.model.commands.request_password_reset_command import (
     RequestPasswordResetCommand,
 )
+from ...domain.model.commands.reset_password_command import (
+    InvalidResetTokenError,
+    ResetPasswordCommand,
+)
 from ...domain.services.token_service import TokenPayload
 from ...domain.services.user_command_service import IUserCommandService
 from ...domain.value_objects.role import Role
@@ -24,6 +28,7 @@ from ..schemas.auth_schema import (
     LoginRequest,
     RefreshTokenRequest,
     RegisterRequest,
+    ResetPasswordRequest,
     TokenResponse,
 )
 from ..schemas.user_schema import (
@@ -219,6 +224,30 @@ async def forgot_password(
         RequestPasswordResetCommand(email=request.email)
     )
     return {"message": "Te hemos enviado las instrucciones por correo"}
+
+
+@router.post(
+    "/reset-password",
+    status_code=204,
+    summary="Restablecer contraseña con el token del correo",
+    responses={
+        204: {"description": "Contraseña actualizada."},
+        400: {"description": "El enlace no es válido o expiró."},
+        **PYDANTIC_VALIDATION,
+    },
+)
+async def reset_password(
+    request: ResetPasswordRequest,
+    service: Annotated[IUserCommandService, Depends(get_user_command_service)],
+) -> Response:
+    """Fija la nueva contraseña usando el token recibido por correo (HU-27)."""
+    try:
+        await service.handle_reset_password(
+            ResetPasswordCommand(token=request.token, new_password=request.new_password)
+        )
+    except (InvalidResetTokenError, ValueError):
+        raise HTTPException(status_code=400, detail="El enlace no es válido o expiró")
+    return Response(status_code=204)
 
 
 @router.post(
