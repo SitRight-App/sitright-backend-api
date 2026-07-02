@@ -7,6 +7,7 @@ from ...entities.user import User
 class ListUsersQuery:
     limit: int = 100
     offset: int = 0
+    active: bool | None = None  # None = todos, True = solo activos, False = solo inactivos
 
 
 @dataclass(frozen=True)

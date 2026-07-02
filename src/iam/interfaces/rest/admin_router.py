@@ -121,13 +121,30 @@ async def list_users(
     service: Annotated[IUserQueryService, Depends(get_user_query_service)],
     limit: int = Query(100, ge=1, le=500),
     offset: int = Query(0, ge=0),
+    status: str | None = Query(
+        None,
+        description="Filtra por estado de la cuenta: `active` | `inactive`. Omitido = todos.",
+    ),
 ) -> dict:
     """Lista todos los usuarios del sistema (solo admin).
 
     enriquecemos cada usuario con la última sesión registrada y
     el estado del chaleco vinculado para mostrarlos en la tabla.
     """
-    page = await service.handle_list_users(ListUsersQuery(limit=limit, offset=offset))
+    active: bool | None
+    if status == "active":
+        active = True
+    elif status == "inactive":
+        active = False
+    elif status is None:
+        active = None
+    else:
+        raise HTTPException(
+            status_code=400, detail="status inválido: use 'active' o 'inactive'"
+        )
+    page = await service.handle_list_users(
+        ListUsersQuery(limit=limit, offset=offset, active=active)
+    )
 
     user_ids = [u.id for u in page.users]
     last_sessions = (

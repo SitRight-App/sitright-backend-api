@@ -58,6 +58,10 @@ def get_query_service() -> IVestQueryService:
 
 
 def _to_response(d: VestDevice) -> VestResponse:
+    calibrated_at = None
+    if d.calibration_reference is not None:
+        ts = d.calibration_reference.calibrated_at
+        calibrated_at = ts.isoformat() if hasattr(ts, "isoformat") else ts
     return VestResponse(
         id=str(d.id),
         mac_address=d.mac_address,
@@ -69,6 +73,7 @@ def _to_response(d: VestDevice) -> VestResponse:
         is_linked=d.is_linked(),
         linked_at=d.linked_at,
         created_at=d.created_at,
+        calibrated_at=calibrated_at,
     )
 
 

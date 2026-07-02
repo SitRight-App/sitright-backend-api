@@ -32,12 +32,16 @@ class MongoUserRepository:
         count = await self._col.count_documents({"email": email.lower().strip()}, limit=1)
         return count > 0
 
-    async def find_all(self, limit: int = 100, offset: int = 0) -> list[User]:
-        cursor = self._col.find({}).sort("created_at", -1).skip(offset).limit(limit)
+    async def find_all(
+        self, limit: int = 100, offset: int = 0, active: bool | None = None
+    ) -> list[User]:
+        query = {} if active is None else {"is_active": active}
+        cursor = self._col.find(query).sort("created_at", -1).skip(offset).limit(limit)
         return [self._from_document(doc) async for doc in cursor]
 
-    async def count_all(self) -> int:
-        return await self._col.count_documents({})
+    async def count_all(self, active: bool | None = None) -> int:
+        query = {} if active is None else {"is_active": active}
+        return await self._col.count_documents(query)
 
     async def count_active(self) -> int:
         return await self._col.count_documents({"is_active": True})

@@ -36,9 +36,9 @@ class UserQueryService(IUserQueryService):
 
     async def handle_list_users(self, query: ListUsersQuery) -> UsersPage:
         users = await self.user_repository.find_all(
-            limit=query.limit, offset=query.offset
+            limit=query.limit, offset=query.offset, active=query.active
         )
-        total = await self.user_repository.count_all()
+        total = await self.user_repository.count_all(active=query.active)
         return UsersPage(total=total, users=users)
 
     async def handle_list_notifications(

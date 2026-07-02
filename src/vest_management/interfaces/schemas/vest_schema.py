@@ -44,6 +44,7 @@ class VestResponse(BaseModel):
     is_linked: bool
     linked_at: datetime | None
     created_at: datetime
+    calibrated_at: str | None = None
 
 
 class LinkVestResponse(BaseModel):
