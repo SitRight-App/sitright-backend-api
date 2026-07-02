@@ -1,7 +1,7 @@
 from typing import Protocol
 from uuid import UUID
 
-from ..entities.notification import Notification
+from ..entities.notification import Notification, NotificationType
 
 
 class NotificationRepository(Protocol):
@@ -12,3 +12,6 @@ class NotificationRepository(Protocol):
     async def count_unread(self, user_id: UUID) -> int: ...
     async def mark_as_read(self, notification_id: UUID) -> None: ...
     async def mark_all_as_read(self, user_id: UUID) -> int: ...
+    async def find_latest_by_type(
+        self, user_id: UUID, type_: NotificationType
+    ) -> Notification | None: ...

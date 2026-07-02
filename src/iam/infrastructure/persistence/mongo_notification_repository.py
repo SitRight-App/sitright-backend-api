@@ -50,6 +50,15 @@ class MongoNotificationRepository:
         )
         return result.modified_count
 
+    async def find_latest_by_type(
+        self, user_id: UUID, type_: NotificationType
+    ) -> Notification | None:
+        doc = await self._col.find_one(
+            {"user_id": str(user_id), "type": type_.value},
+            sort=[("sent_at", -1)],
+        )
+        return self._from_document(doc) if doc else None
+
     def _to_document(self, n: Notification) -> dict:
         return {
             "_id": str(n.id),

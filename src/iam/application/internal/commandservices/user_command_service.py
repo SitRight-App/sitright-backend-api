@@ -16,6 +16,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from uuid import uuid4
 
+from ....domain.entities.notification import Notification, NotificationChannel, NotificationType
 from ....domain.entities.password_reset_token import PasswordResetToken
 from ....domain.entities.user import User
 from ....domain.model.commands.change_password_command import (
@@ -36,6 +37,10 @@ from ....domain.model.commands.mark_all_notifications_read_command import (
 )
 from ....domain.model.commands.mark_notification_read_command import (
     MarkNotificationReadCommand,
+)
+from ....domain.model.commands.notify_event_command import (
+    InvalidNotificationEventError,
+    NotifyEventCommand,
 )
 from ....domain.model.commands.refresh_token_command import RefreshTokenCommand
 from ....domain.model.commands.register_user_command import (
@@ -69,6 +74,21 @@ logger = logging.getLogger(__name__)
 
 def _hash_token(raw: str) -> str:
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+# HU alertas — mapeo evento -> (tipo de notificacion, mensaje).
+_NOTIFY_EVENTS: dict[str, tuple[NotificationType, str]] = {
+    "bad_posture_alert": (
+        NotificationType.BAD_POSTURE_ALERT,
+        "Llevas varios minutos en mala postura. Endereza la espalda.",
+    ),
+    "break_reminder": (
+        NotificationType.BREAK_REMINDER,
+        "Llevas mucho tiempo sentado. Tomate una pausa activa de 1-2 min.",
+    ),
+}
+
+_NOTIFY_COOLDOWN = timedelta(minutes=30)
 
 
 @dataclass
@@ -267,3 +287,50 @@ class UserCommandService(IUserCommandService):
         self, command: MarkAllNotificationsReadCommand
     ) -> int:
         return await self.notification_repository.mark_all_as_read(command.user_id)
+
+    async def handle_notify_event(self, command: NotifyEventCommand) -> None:
+        mapped = _NOTIFY_EVENTS.get(command.event_type)
+        if mapped is None:
+            raise InvalidNotificationEventError(
+                f"Tipo de evento de notificación desconocido: {command.event_type}"
+            )
+        type_, message = mapped
+
+        user = await self.user_repository.find_by_id(command.user_id)
+        if user is None:
+            return
+
+        now = datetime.utcnow()
+        latest = await self.notification_repository.find_latest_by_type(user.id, type_)
+        if latest is not None and (now - latest.sent_at) < _NOTIFY_COOLDOWN:
+            return  # anti-spam: ya se notificó este tipo de evento hace poco.
+
+        channel = (
+            NotificationChannel.EMAIL
+            if user.preferences.email_notifications
+            else NotificationChannel.IN_APP
+        )
+        notification = Notification(
+            id=uuid4(),
+            user_id=user.id,
+            type=type_,
+            message=message,
+            channel=channel,
+            sent_at=now,
+            is_read=False,
+        )
+        await self.notification_repository.save(notification)
+
+        if user.preferences.email_notifications:
+            try:
+                if type_ == NotificationType.BAD_POSTURE_ALERT:
+                    await self.email_service.send_posture_alert(user.email, user.name)
+                else:
+                    await self.email_service.send_break_reminder(user.email, user.name)
+            except Exception:
+                logger.warning(
+                    "[notify-event] fallo enviando el correo de %s a user_id=%s",
+                    command.event_type,
+                    user.id,
+                    exc_info=True,
+                )

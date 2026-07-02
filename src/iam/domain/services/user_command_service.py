@@ -18,6 +18,7 @@ from ..model.commands.mark_all_notifications_read_command import (
 from ..model.commands.mark_notification_read_command import (
     MarkNotificationReadCommand,
 )
+from ..model.commands.notify_event_command import NotifyEventCommand
 from ..model.commands.refresh_token_command import RefreshTokenCommand
 from ..model.commands.register_user_command import RegisterUserCommand
 from ..model.commands.request_password_reset_command import (
@@ -47,3 +48,4 @@ class IUserCommandService(Protocol):
     async def handle_mark_all_notifications_read(
         self, command: MarkAllNotificationsReadCommand
     ) -> int: ...
+    async def handle_notify_event(self, command: NotifyEventCommand) -> None: ...

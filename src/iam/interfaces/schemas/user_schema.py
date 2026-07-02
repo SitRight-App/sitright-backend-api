@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel
 
@@ -47,3 +48,7 @@ class NotificationResponse(BaseModel):
 
 class UnreadNotificationsResponse(BaseModel):
     count: int
+
+
+class NotifyEventRequest(BaseModel):
+    type: Literal["bad_posture_alert", "break_reminder"]

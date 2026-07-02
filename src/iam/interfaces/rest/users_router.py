@@ -13,6 +13,10 @@ from ...domain.model.commands.mark_all_notifications_read_command import (
 from ...domain.model.commands.mark_notification_read_command import (
     MarkNotificationReadCommand,
 )
+from ...domain.model.commands.notify_event_command import (
+    InvalidNotificationEventError,
+    NotifyEventCommand,
+)
 from ...domain.model.commands.update_profile_command import UpdateProfileCommand
 from ...domain.model.queries.count_unread_notifications_query import (
     CountUnreadNotificationsQuery,
@@ -31,6 +35,7 @@ from ..schemas.auth_schema import ChangePasswordRequest
 from ..schemas.user_schema import (
     AnthropometricSchema,
     NotificationResponse,
+    NotifyEventRequest,
     PreferencesSchema,
     UnreadNotificationsResponse,
     UpdateProfileRequest,
@@ -265,3 +270,29 @@ async def mark_all_my_notifications_read(
         MarkAllNotificationsReadCommand(user_id=current.user_id)
     )
     return {"marked_as_read": count}
+
+
+@router.post(
+    "/me/notifications",
+    status_code=204,
+    summary="Notificar un evento de postura/pausa (alerta o recordatorio)",
+    responses={
+        204: {"description": "Evento procesado (puede omitirse por cooldown anti-spam)."},
+        **UNAUTHORIZED,
+        **PYDANTIC_VALIDATION,
+    },
+)
+async def notify_my_event(
+    request: NotifyEventRequest,
+    current: Annotated[TokenPayload, Depends(get_current_user)],
+    service: Annotated[IUserCommandService, Depends(get_user_command_service)],
+) -> Response:
+    """El frontend calcula las alertas y notifica el evento aquí (postura mala
+    prolongada o recordatorio de pausa activa)."""
+    try:
+        await service.handle_notify_event(
+            NotifyEventCommand(user_id=current.user_id, event_type=request.type)
+        )
+    except InvalidNotificationEventError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    return Response(status_code=204)

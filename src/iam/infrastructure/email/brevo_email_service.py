@@ -62,6 +62,42 @@ class BrevoEmailService:
         )
         return msg
 
+    def _build_posture_alert_message(self, to_email: str, to_name: str) -> EmailMessage:
+        msg = EmailMessage()
+        msg["Subject"] = "Llevas un rato en mala postura"
+        msg["From"] = f"{self._sender_name} <{self._sender_address}>"
+        msg["To"] = f"{to_name} <{to_email}>"
+        msg.set_content(
+            f"Hola {to_name},\n\n"
+            "Detectamos que llevas un rato en mala postura.\n"
+            "Endereza la espalda y ajusta tu posicion frente al escritorio.\n"
+        )
+        msg.add_alternative(
+            f"<p>Hola {to_name},</p>"
+            "<p>Detectamos que llevas un rato en mala postura.</p>"
+            "<p>Endereza la espalda y ajusta tu posicion frente al escritorio.</p>",
+            subtype="html",
+        )
+        return msg
+
+    def _build_break_reminder_message(self, to_email: str, to_name: str) -> EmailMessage:
+        msg = EmailMessage()
+        msg["Subject"] = "Es momento de una pausa activa"
+        msg["From"] = f"{self._sender_name} <{self._sender_address}>"
+        msg["To"] = f"{to_name} <{to_email}>"
+        msg.set_content(
+            f"Hola {to_name},\n\n"
+            "Llevas bastante tiempo sentado.\n"
+            "Levantate y estirate 1-2 minutos antes de continuar.\n"
+        )
+        msg.add_alternative(
+            f"<p>Hola {to_name},</p>"
+            "<p>Llevas bastante tiempo sentado.</p>"
+            "<p>Levantate y estirate 1-2 minutos antes de continuar.</p>",
+            subtype="html",
+        )
+        return msg
+
     def _send_sync(self, msg: EmailMessage) -> None:
         with smtplib.SMTP(self._host, self._port, timeout=15) as smtp:
             smtp.starttls()
@@ -86,4 +122,22 @@ class BrevoEmailService:
             )
             return
         msg = self._build_password_changed_message(to_email, to_name)
+        await asyncio.to_thread(self._send_sync, msg)
+
+    async def send_posture_alert(self, to_email: str, to_name: str) -> None:
+        if not self._configured():
+            logger.info(
+                "[posture-alert] (modo dev, sin SMTP) aviso para %s", to_email
+            )
+            return
+        msg = self._build_posture_alert_message(to_email, to_name)
+        await asyncio.to_thread(self._send_sync, msg)
+
+    async def send_break_reminder(self, to_email: str, to_name: str) -> None:
+        if not self._configured():
+            logger.info(
+                "[break-reminder] (modo dev, sin SMTP) aviso para %s", to_email
+            )
+            return
+        msg = self._build_break_reminder_message(to_email, to_name)
         await asyncio.to_thread(self._send_sync, msg)

@@ -6,6 +6,7 @@ from uuid import UUID
 
 class NotificationType(str, Enum):
     BAD_POSTURE_ALERT = "bad_posture_alert"
+    BREAK_REMINDER = "break_reminder"
     SESSION_CLOSED = "session_closed"
     WEEKLY_SUMMARY = "weekly_summary"
     CALIBRATION_NEEDED = "calibration_needed"
