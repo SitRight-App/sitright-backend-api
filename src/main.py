@@ -9,8 +9,12 @@ from .iam.application.internal.commandservices.user_command_service import (
 )
 from .iam.application.internal.queryservices.user_query_service import UserQueryService
 from .iam.application.seed_demo_users import seed_demo_users
+from .iam.infrastructure.email.brevo_email_service import BrevoEmailService
 from .iam.infrastructure.persistence.mongo_notification_repository import (
     MongoNotificationRepository,
+)
+from .iam.infrastructure.persistence.mongo_password_reset_token_repository import (
+    MongoPasswordResetTokenRepository,
 )
 from .iam.infrastructure.persistence.mongo_user_repository import MongoUserRepository
 from .iam.infrastructure.security.bcrypt_password_service import BcryptPasswordService
@@ -108,11 +112,19 @@ async def lifespan(app: FastAPI):
     )
     set_token_service(token_service)
 
+    reset_token_repo = MongoPasswordResetTokenRepository(db)
+    await reset_token_repo.ensure_indexes()
+    email_service = BrevoEmailService(settings)
+
     user_command_service = UserCommandService(
         user_repository=user_repo,
         notification_repository=notif_repo,
         password_service=password_service,
         token_service=token_service,
+        reset_token_repository=reset_token_repo,
+        email_service=email_service,
+        app_base_url=settings.app_base_url,
+        reset_token_ttl_seconds=settings.reset_token_expires_seconds,
     )
     user_query_service = UserQueryService(
         user_repository=user_repo,

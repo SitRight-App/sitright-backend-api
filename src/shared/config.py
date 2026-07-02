@@ -21,6 +21,15 @@ class Settings(BaseSettings):
 
     vest_pairing_code: str = ""
 
+    app_base_url: str = "https://sitright-web-client.netlify.app"
+    reset_token_expires_seconds: int = 3600
+    brevo_smtp_host: str = "smtp-relay.brevo.com"
+    brevo_smtp_port: int = 587
+    brevo_smtp_user: str = ""
+    brevo_smtp_key: str = ""
+    email_sender_name: str = "SitRight"
+    email_sender_address: str = ""
+
     model_config = {"env_file": ".env"}
 
 

@@ -9,11 +9,14 @@ Repositorios + Services del dominio.
 """
 from __future__ import annotations
 
+import hashlib
 import logging
+import secrets
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from uuid import uuid4
 
+from ....domain.entities.password_reset_token import PasswordResetToken
 from ....domain.entities.user import User
 from ....domain.model.commands.change_password_command import (
     ChangePasswordCommand,
@@ -42,9 +45,17 @@ from ....domain.model.commands.register_user_command import (
 from ....domain.model.commands.request_password_reset_command import (
     RequestPasswordResetCommand,
 )
+from ....domain.model.commands.reset_password_command import (
+    InvalidResetTokenError,
+    ResetPasswordCommand,
+)
 from ....domain.model.commands.update_profile_command import UpdateProfileCommand
 from ....domain.repositories.notification_repository import NotificationRepository
+from ....domain.repositories.password_reset_token_repository import (
+    PasswordResetTokenRepository,
+)
 from ....domain.repositories.user_repository import UserRepository
+from ....domain.services.email_service import EmailService
 from ....domain.services.password_service import PasswordService
 from ....domain.services.token_service import TokenService
 from ....domain.services.user_command_service import IUserCommandService
@@ -56,12 +67,20 @@ from ....domain.value_objects.token_pair import TokenPair
 logger = logging.getLogger(__name__)
 
 
+def _hash_token(raw: str) -> str:
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
 @dataclass
 class UserCommandService(IUserCommandService):
     user_repository: UserRepository
     notification_repository: NotificationRepository
     password_service: PasswordService
     token_service: TokenService
+    reset_token_repository: PasswordResetTokenRepository
+    email_service: EmailService
+    app_base_url: str
+    reset_token_ttl_seconds: int
 
     # ── Registro y autenticación ──────────────────────────────────────────
 
@@ -166,10 +185,7 @@ class UserCommandService(IUserCommandService):
     async def handle_request_password_reset(
         self, command: RequestPasswordResetCommand
     ) -> None:
-        # HU-27 — respuesta uniforme aunque el correo no exista (AC2). Si la
-        # cuenta existe, dejamos rastro en logs para que un consumidor de
-        # email envíe el enlace con TTL 1h (AC3). Aquí no se envía correo;
-        # el stub describe la intención.
+        # HU-27 — respuesta uniforme aunque el correo no exista (AC2).
         normalized = command.email.lower().strip()
         user = await self.user_repository.find_by_email(normalized)
         if user is None:
@@ -177,10 +193,47 @@ class UserCommandService(IUserCommandService):
                 "[forgot-password] solicitud para correo no registrado: %s", normalized
             )
             return
-        logger.info(
-            "[forgot-password] solicitud válida para user_id=%s (TTL 1h pendiente)",
-            user.id,
+        # Invalida enlaces previos y genera uno nuevo (crudo por correo, hash en BD).
+        await self.reset_token_repository.invalidate_for_user(user.id)
+        raw = secrets.token_urlsafe(32)
+        now = datetime.utcnow()
+        token = PasswordResetToken(
+            id=uuid4(),
+            user_id=user.id,
+            token_hash=_hash_token(raw),
+            expires_at=now + timedelta(seconds=self.reset_token_ttl_seconds),
+            created_at=now,
         )
+        await self.reset_token_repository.save(token)
+        link = f"{self.app_base_url}/reset-password?token={raw}"
+        try:
+            await self.email_service.send_password_reset(user.email, user.name, link)
+        except Exception:
+            logger.warning(
+                "[forgot-password] fallo enviando el correo a user_id=%s",
+                user.id,
+                exc_info=True,
+            )
+
+    async def handle_reset_password(self, command: ResetPasswordCommand) -> None:
+        # HU-27 — fija la nueva contrasena si el token es valido (no usado, no vencido).
+        if len(command.new_password) < 8:
+            raise ValueError("La contraseña debe tener al menos 8 caracteres")
+        token = await self.reset_token_repository.find_by_hash(
+            _hash_token(command.token)
+        )
+        now = datetime.utcnow()
+        if token is None or not token.is_valid(now):
+            raise InvalidResetTokenError("El enlace no es válido o expiró")
+        user = await self.user_repository.find_by_id(token.user_id)
+        if user is None or not user.is_active:
+            raise InvalidResetTokenError("El enlace no es válido o expiró")
+        user.password_hash = self.password_service.hash(command.new_password)
+        user.updated_at = now
+        await self.user_repository.save(user)
+        # Un solo uso: marca el usado e invalida todos los del usuario.
+        await self.reset_token_repository.mark_used(token.id, now)
+        await self.reset_token_repository.invalidate_for_user(user.id)
 
     # ── Admin ─────────────────────────────────────────────────────────────
 

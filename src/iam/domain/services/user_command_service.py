@@ -23,6 +23,7 @@ from ..model.commands.register_user_command import RegisterUserCommand
 from ..model.commands.request_password_reset_command import (
     RequestPasswordResetCommand,
 )
+from ..model.commands.reset_password_command import ResetPasswordCommand
 from ..model.commands.update_profile_command import UpdateProfileCommand
 from ..value_objects.token_pair import TokenPair
 
@@ -38,6 +39,7 @@ class IUserCommandService(Protocol):
     async def handle_request_password_reset(
         self, command: RequestPasswordResetCommand
     ) -> None: ...
+    async def handle_reset_password(self, command: ResetPasswordCommand) -> None: ...
     async def handle_deactivate_user(self, command: DeactivateUserCommand) -> None: ...
     async def handle_mark_notification_read(
         self, command: MarkNotificationReadCommand
