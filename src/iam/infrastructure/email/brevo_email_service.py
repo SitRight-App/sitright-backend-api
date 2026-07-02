@@ -33,6 +33,13 @@ class BrevoEmailService:
             f"{reset_link}\n\n"
             "Si no fuiste tu, ignora este correo.\n"
         )
+        msg.add_alternative(
+            f"<p>Hola {to_name},</p>"
+            "<p>Recibimos una solicitud para restablecer tu contrasena de SitRight.</p>"
+            f'<p><a href="{reset_link}">Crear una nueva contrasena</a> (caduca en 1 hora).</p>'
+            "<p>Si no fuiste tu, ignora este correo.</p>",
+            subtype="html",
+        )
         return msg
 
     def _send_sync(self, msg: EmailMessage) -> None:

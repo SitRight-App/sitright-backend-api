@@ -24,7 +24,8 @@ def test_build_message_incluye_remitente_destino_y_enlace():
     msg = svc._build_message("u@correo.com", "Ana", LINK)
     assert msg["From"] == "SitRight <no-reply@sitright.app>"
     assert "u@correo.com" in msg["To"]
-    assert LINK in msg.get_content()
+    assert LINK in msg.as_string()
+    assert msg.get_body(preferencelist=("html",)) is not None
 
 
 async def test_modo_dev_loguea_el_enlace_si_no_hay_credenciales(caplog):
