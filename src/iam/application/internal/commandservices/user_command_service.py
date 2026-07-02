@@ -181,6 +181,14 @@ class UserCommandService(IUserCommandService):
         user.password_hash = self.password_service.hash(command.new_password)
         user.updated_at = datetime.utcnow()
         await self.user_repository.save(user)
+        try:
+            await self.email_service.send_password_changed(user.email, user.name)
+        except Exception:
+            logger.warning(
+                "[change-password] fallo enviando el correo de aviso a user_id=%s",
+                user.id,
+                exc_info=True,
+            )
 
     async def handle_request_password_reset(
         self, command: RequestPasswordResetCommand

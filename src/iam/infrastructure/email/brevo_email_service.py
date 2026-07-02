@@ -42,6 +42,26 @@ class BrevoEmailService:
         )
         return msg
 
+    def _build_password_changed_message(self, to_email: str, to_name: str) -> EmailMessage:
+        msg = EmailMessage()
+        msg["Subject"] = "Tu contrasena de SitRight fue cambiada"
+        msg["From"] = f"{self._sender_name} <{self._sender_address}>"
+        msg["To"] = f"{to_name} <{to_email}>"
+        msg.set_content(
+            f"Hola {to_name},\n\n"
+            "Te avisamos que la contrasena de tu cuenta de SitRight fue cambiada.\n"
+            "Si fuiste tu, no necesitas hacer nada mas.\n"
+            "Si no reconoces este cambio, contacta a soporte de inmediato.\n"
+        )
+        msg.add_alternative(
+            f"<p>Hola {to_name},</p>"
+            "<p>Te avisamos que la contrasena de tu cuenta de SitRight fue cambiada.</p>"
+            "<p>Si fuiste tu, no necesitas hacer nada mas.</p>"
+            "<p>Si no reconoces este cambio, contacta a soporte de inmediato.</p>",
+            subtype="html",
+        )
+        return msg
+
     def _send_sync(self, msg: EmailMessage) -> None:
         with smtplib.SMTP(self._host, self._port, timeout=15) as smtp:
             smtp.starttls()
@@ -57,4 +77,13 @@ class BrevoEmailService:
             )
             return
         msg = self._build_message(to_email, to_name, reset_link)
+        await asyncio.to_thread(self._send_sync, msg)
+
+    async def send_password_changed(self, to_email: str, to_name: str) -> None:
+        if not self._configured():
+            logger.info(
+                "[password-changed] (modo dev, sin SMTP) aviso para %s", to_email
+            )
+            return
+        msg = self._build_password_changed_message(to_email, to_name)
         await asyncio.to_thread(self._send_sync, msg)
