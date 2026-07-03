@@ -45,3 +45,7 @@ CLAUDE.md
 
 # ─── Logs ─────────────────────────────────────────────────────────────────────
 *.log
+
+# Artefactos de planificacion (superpowers) — no versionar
+docs/superpowers/
+.superpowers/
