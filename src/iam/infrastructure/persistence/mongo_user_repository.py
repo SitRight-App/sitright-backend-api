@@ -86,7 +86,7 @@ class MongoUserRepository:
             preferences=Preferences(
                 email_notifications=prefs_doc.get("email_notifications", True),
                 alert_threshold_minutes=prefs_doc.get("alert_threshold_minutes", 30),
-                # HU-12 AC4: default 60 si nunca se configuró.
+                # Default 60 si nunca se configuró.
                 break_reminder_minutes=prefs_doc.get("break_reminder_minutes", 60),
                 language=prefs_doc.get("language", "es"),
             ),

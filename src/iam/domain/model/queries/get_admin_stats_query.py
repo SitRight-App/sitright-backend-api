@@ -4,7 +4,7 @@ from typing import Protocol
 
 @dataclass(frozen=True)
 class GetAdminStatsQuery:
-    """HU-22 AC1 — métricas globales del piloto. Query sin parámetros, sólo
+    """Métricas globales del piloto. Query sin parámetros, sólo
     pide los conteos agregados."""
 
 

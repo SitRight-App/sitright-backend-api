@@ -39,9 +39,9 @@ class PostureCaptureCommandService(IPostureCaptureCommandService):
                 reading, posture_class=posture_class, confidence=confidence
             )
         except Exception as exc:
-            # HU-04 AC4 — ml-service no respondió a tiempo (timeout 2 s) u
-            # otro error; la lectura queda como 'indeterminate' y se registra
-            # el incidente.
+            # Si el ml-service no respondió a tiempo (timeout 2 s) u otro
+            # error, la lectura queda como 'indeterminate' y se registra el
+            # incidente.
             logger.warning(
                 "[ml] no se pudo clasificar la lectura %s, queda como indeterminate: %s",
                 reading.id,

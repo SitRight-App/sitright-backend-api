@@ -213,7 +213,7 @@ class UserCommandService(IUserCommandService):
     async def handle_request_password_reset(
         self, command: RequestPasswordResetCommand
     ) -> None:
-        # HU-27 — respuesta uniforme aunque el correo no exista (AC2).
+        # Respuesta uniforme aunque el correo no exista.
         normalized = command.email.lower().strip()
         user = await self.user_repository.find_by_email(normalized)
         if user is None:
@@ -244,7 +244,7 @@ class UserCommandService(IUserCommandService):
             )
 
     async def handle_reset_password(self, command: ResetPasswordCommand) -> None:
-        # HU-27 — fija la nueva contrasena si el token es valido (no usado, no vencido).
+        # Fija la nueva contrasena si el token es valido (no usado, no vencido).
         if len(command.new_password) < 8:
             raise ValueError("La contraseña debe tener al menos 8 caracteres")
         token = await self.reset_token_repository.find_by_hash(

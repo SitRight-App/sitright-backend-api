@@ -1,8 +1,8 @@
 from dataclasses import dataclass
 
-# HU-26 AC2 — rangos antropométricos razonables. Fuera de estos rangos no
-# se trata de un valor humano realista; el handler debe rechazar la
-# actualización con error de validación.
+# Rangos antropométricos razonables. Fuera de estos rangos no se trata de un
+# valor humano realista; el handler debe rechazar la actualización con error
+# de validación.
 HEIGHT_MIN_CM = 100.0
 HEIGHT_MAX_CM = 250.0
 WEIGHT_MIN_KG = 25.0

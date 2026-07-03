@@ -136,8 +136,8 @@ async def lifespan(app: FastAPI):
     users_router.set_user_query_service(user_query_service)
     admin_router.set_user_command_service(user_command_service)
     admin_router.set_user_query_service(user_query_service)
-    # HU-29 AC1 — adapters de "última sesión" y "chaleco vinculado" para
-    # enriquecer la tabla del panel admin.
+    # Adapters de "última sesión" y "chaleco vinculado" para enriquecer la
+    # tabla del panel admin.
     admin_router.set_last_sessions_lookup(MongoLastSessionsAdapter(db))
     admin_router.set_linked_vests_lookup(MongoLinkedVestsAdapter(db))
 
@@ -168,7 +168,7 @@ async def lifespan(app: FastAPI):
     readings_router.set_command_service(posture_capture_command_service)
     readings_router.set_query_service(posture_capture_query_service)
     # readings_router necesita resolver el chaleco del usuario para filtrar
-    # /latest, /recent y /latest/raw, y validar 403 en POST por MAC (HU-02 AC3).
+    # /latest, /recent y /latest/raw, y validar 403 en POST por MAC.
     readings_router.set_vest_query_service(vest_query_service)
 
     # ── Session History

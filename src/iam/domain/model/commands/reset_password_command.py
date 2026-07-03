@@ -8,4 +8,4 @@ class ResetPasswordCommand:
 
 
 class InvalidResetTokenError(Exception):
-    """HU-27 — el token de recuperación es inválido, expiró o ya se usó."""
+    """El token de recuperación es inválido, expiró o ya se usó."""

@@ -10,4 +10,4 @@ class ChangePasswordCommand:
 
 
 class InvalidCurrentPasswordError(Exception):
-    """HU-28 AC2 — la contraseña actual proporcionada no coincide."""
+    """La contraseña actual proporcionada no coincide."""

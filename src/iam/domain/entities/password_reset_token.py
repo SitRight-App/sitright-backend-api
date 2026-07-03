@@ -5,7 +5,7 @@ from uuid import UUID
 
 @dataclass
 class PasswordResetToken:
-    """HU-27 — token de recuperación. En Mongo se guarda solo el hash; el crudo
+    """Token de recuperación. En Mongo se guarda solo el hash; el crudo
     viaja en el enlace del correo. Un solo uso, con caducidad (TTL 1h)."""
 
     id: UUID

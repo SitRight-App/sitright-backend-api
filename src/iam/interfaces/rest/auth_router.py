@@ -240,7 +240,7 @@ async def reset_password(
     request: ResetPasswordRequest,
     service: Annotated[IUserCommandService, Depends(get_user_command_service)],
 ) -> Response:
-    """Fija la nueva contraseña usando el token recibido por correo (HU-27)."""
+    """Fija la nueva contraseña usando el token recibido por correo."""
     try:
         await service.handle_reset_password(
             ResetPasswordCommand(token=request.token, new_password=request.new_password)
