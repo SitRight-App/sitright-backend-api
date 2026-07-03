@@ -1,9 +1,10 @@
-import asyncio
 import logging
-import smtplib
-from email.message import EmailMessage
+
+import httpx
 
 logger = logging.getLogger(__name__)
+
+_API_URL = "https://api.brevo.com/v3/smtp/email"
 
 # Paleta de marca SitRight (HTML de los correos)
 _MOSS = "#2d4a36"
@@ -18,19 +19,20 @@ _FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial
 
 
 class BrevoEmailService:
-    """Envía correos transaccionales por el relay SMTP de Brevo. Si faltan
-    credenciales, corre en modo dev: no envía y loguea el aviso (útil en local)."""
+    """Envía correos transaccionales por la API HTTP de Brevo (puerto 443).
+
+    Se usa la API HTTP en lugar de SMTP porque muchos hosts (Render) bloquean
+    los puertos SMTP salientes. Si faltan credenciales o remitente, corre en
+    modo dev: no envía y loguea el aviso.
+    """
 
     def __init__(self, settings) -> None:
-        self._host = settings.brevo_smtp_host
-        self._port = settings.brevo_smtp_port
-        self._user = settings.brevo_smtp_user
-        self._key = settings.brevo_smtp_key
+        self._api_key = settings.brevo_api_key
         self._sender_name = settings.email_sender_name
         self._sender_address = settings.email_sender_address
 
     def _configured(self) -> bool:
-        return bool(self._user and self._key and self._sender_address)
+        return bool(self._api_key and self._sender_address)
 
     # ── Plantilla HTML de marca ────────────────────────────────────────────
     def _html(
@@ -79,16 +81,8 @@ class BrevoEmailService:
             "</table></td></tr></table></div>"
         )
 
-    def _msg(self, to_email: str, to_name: str, subject: str, text: str, html: str) -> EmailMessage:
-        msg = EmailMessage()
-        msg["Subject"] = subject
-        msg["From"] = f"{self._sender_name} <{self._sender_address}>"
-        msg["To"] = f"{to_name} <{to_email}>"
-        msg.set_content(text)
-        msg.add_alternative(html, subtype="html")
-        return msg
-
-    def _build_message(self, to_email: str, to_name: str, reset_link: str) -> EmailMessage:
+    # ── Construcción de cada correo -> (asunto, texto, html) ────────────────
+    def _build_message(self, to_name: str, reset_link: str) -> tuple[str, str, str]:
         text = (
             f"Hola {to_name},\n\n"
             "Recibimos una solicitud para restablecer tu contraseña de SitRight.\n"
@@ -109,9 +103,9 @@ class BrevoEmailService:
                 "Si no fuiste tú, puedes ignorar este correo: tu contraseña seguirá igual."
             ),
         )
-        return self._msg(to_email, to_name, "Restablece tu contraseña de SitRight", text, html)
+        return "Restablece tu contraseña de SitRight", text, html
 
-    def _build_password_changed_message(self, to_email: str, to_name: str) -> EmailMessage:
+    def _build_password_changed_message(self, to_name: str) -> tuple[str, str, str]:
         text = (
             f"Hola {to_name},\n\n"
             "Te avisamos que la contraseña de tu cuenta de SitRight fue cambiada.\n"
@@ -128,9 +122,9 @@ class BrevoEmailService:
                 "Contacta a soporte de inmediato para proteger tu cuenta."
             ),
         )
-        return self._msg(to_email, to_name, "Tu contraseña de SitRight fue cambiada", text, html)
+        return "Tu contraseña de SitRight fue cambiada", text, html
 
-    def _build_posture_alert_message(self, to_email: str, to_name: str) -> EmailMessage:
+    def _build_posture_alert_message(self, to_name: str) -> tuple[str, str, str]:
         text = (
             f"Hola {to_name},\n\n"
             "Detectamos que llevas un rato en mala postura.\n"
@@ -143,9 +137,9 @@ class BrevoEmailService:
             "frente al escritorio. Tu columna te lo agradecerá.</p>",
             accent=_TERRACOTTA,
         )
-        return self._msg(to_email, to_name, "Llevas un rato en mala postura", text, html)
+        return "Llevas un rato en mala postura", text, html
 
-    def _build_break_reminder_message(self, to_email: str, to_name: str) -> EmailMessage:
+    def _build_break_reminder_message(self, to_name: str) -> tuple[str, str, str]:
         text = (
             f"Hola {to_name},\n\n"
             "Llevas bastante tiempo sentado.\n"
@@ -157,48 +151,60 @@ class BrevoEmailService:
             "<p style='margin:0;'>Levántate y estírate 1–2 minutos antes de continuar. "
             "Una pausa corta ayuda a prevenir la fatiga muscular.</p>",
         )
-        return self._msg(to_email, to_name, "Es momento de una pausa activa", text, html)
+        return "Es momento de una pausa activa", text, html
 
-    def _send_sync(self, msg: EmailMessage) -> None:
-        with smtplib.SMTP(self._host, self._port, timeout=15) as smtp:
-            smtp.starttls()
-            smtp.login(self._user, self._key)
-            smtp.send_message(msg)
+    async def _send(
+        self, to_email: str, to_name: str, subject: str, text: str, html: str
+    ) -> None:
+        payload = {
+            "sender": {"name": self._sender_name, "email": self._sender_address},
+            "to": [{"email": to_email, "name": to_name}],
+            "subject": subject,
+            "htmlContent": html,
+            "textContent": text,
+        }
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.post(
+                _API_URL,
+                headers={
+                    "api-key": self._api_key,
+                    "accept": "application/json",
+                    "content-type": "application/json",
+                },
+                json=payload,
+            )
+            resp.raise_for_status()
 
     async def send_password_reset(
         self, to_email: str, to_name: str, reset_link: str
     ) -> None:
         if not self._configured():
             logger.info(
-                "[reset] (modo dev, sin SMTP) enlace para %s: %s", to_email, reset_link
+                "[reset] (modo dev, sin API) enlace para %s: %s", to_email, reset_link
             )
             return
-        msg = self._build_message(to_email, to_name, reset_link)
-        await asyncio.to_thread(self._send_sync, msg)
+        subject, text, html = self._build_message(to_name, reset_link)
+        await self._send(to_email, to_name, subject, text, html)
 
     async def send_password_changed(self, to_email: str, to_name: str) -> None:
         if not self._configured():
             logger.info(
-                "[password-changed] (modo dev, sin SMTP) aviso para %s", to_email
+                "[password-changed] (modo dev, sin API) aviso para %s", to_email
             )
             return
-        msg = self._build_password_changed_message(to_email, to_name)
-        await asyncio.to_thread(self._send_sync, msg)
+        subject, text, html = self._build_password_changed_message(to_name)
+        await self._send(to_email, to_name, subject, text, html)
 
     async def send_posture_alert(self, to_email: str, to_name: str) -> None:
         if not self._configured():
-            logger.info(
-                "[posture-alert] (modo dev, sin SMTP) aviso para %s", to_email
-            )
+            logger.info("[posture-alert] (modo dev, sin API) aviso para %s", to_email)
             return
-        msg = self._build_posture_alert_message(to_email, to_name)
-        await asyncio.to_thread(self._send_sync, msg)
+        subject, text, html = self._build_posture_alert_message(to_name)
+        await self._send(to_email, to_name, subject, text, html)
 
     async def send_break_reminder(self, to_email: str, to_name: str) -> None:
         if not self._configured():
-            logger.info(
-                "[break-reminder] (modo dev, sin SMTP) aviso para %s", to_email
-            )
+            logger.info("[break-reminder] (modo dev, sin API) aviso para %s", to_email)
             return
-        msg = self._build_break_reminder_message(to_email, to_name)
-        await asyncio.to_thread(self._send_sync, msg)
+        subject, text, html = self._build_break_reminder_message(to_name)
+        await self._send(to_email, to_name, subject, text, html)
