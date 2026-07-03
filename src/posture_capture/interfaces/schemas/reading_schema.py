@@ -5,10 +5,12 @@ from pydantic import BaseModel, Field
 
 
 class ReadingRequest(BaseModel):
-    vest_id: str
-    cervical: list[float] = Field(..., min_length=3, max_length=3)
-    dorsal: list[float] = Field(..., min_length=3, max_length=3)
-    lumbar: list[float] = Field(..., min_length=3, max_length=3)
+    # Opcionales para que el router pueda responder 400 indicando qué campos
+    # faltan cuando la lectura llega incompleta.
+    vest_id: Optional[str] = None
+    cervical: Optional[list[float]] = Field(default=None, min_length=3, max_length=3)
+    dorsal: Optional[list[float]] = Field(default=None, min_length=3, max_length=3)
+    lumbar: Optional[list[float]] = Field(default=None, min_length=3, max_length=3)
     timestamp: Optional[datetime] = None
     battery_percent: int = Field(default=100, ge=0, le=100)
 

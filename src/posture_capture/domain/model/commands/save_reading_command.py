@@ -13,3 +13,4 @@ class SaveReadingCommand:
     timestamp: datetime
     battery_percent: int = 100
     session_id: UUID | None = None
+    user_id: UUID | None = None

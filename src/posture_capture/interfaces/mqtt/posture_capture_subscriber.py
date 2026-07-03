@@ -99,6 +99,7 @@ class PostureCaptureMqttSubscriber:
         command = SaveReadingCommand(
             reading_id=uuid4(),
             vest_id=str(vest_id),
+            user_id=user_id,
             cervical=_triple(data.get("cervical")),
             dorsal=_triple(data.get("dorsal")),
             lumbar=_triple(data.get("lumbar")),

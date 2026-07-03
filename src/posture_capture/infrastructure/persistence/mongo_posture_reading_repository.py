@@ -23,6 +23,7 @@ class MongoPostureReadingRepository:
             "confidence": reading.confidence,
             "battery_percent": reading.battery_percent,
             "session_id": str(reading.session_id) if reading.session_id else None,
+            "user_id": str(reading.user_id) if reading.user_id else None,
         })
 
     async def find_latest(self, vest_id: str | None = None) -> PostureReading | None:
@@ -69,6 +70,7 @@ class MongoPostureReadingRepository:
     @staticmethod
     def _from_doc(doc: dict) -> PostureReading:
         sid = doc.get("session_id")
+        uid = doc.get("user_id")
         return PostureReading(
             id=UUID(doc["_id"]),
             vest_id=doc["vest_id"],
@@ -80,4 +82,5 @@ class MongoPostureReadingRepository:
             confidence=doc["confidence"],
             battery_percent=doc.get("battery_percent", 100),
             session_id=UUID(sid) if sid else None,
+            user_id=UUID(uid) if uid else None,
         )

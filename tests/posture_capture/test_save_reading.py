@@ -3,7 +3,7 @@ Tests de criterios de aceptación:
   HU-01 Happy : POST /readings con battery_percent → 201, battery almacenada
   HU-01 Unhappy: POST sin battery_percent → usa default 100%, igual 201
   HU-02 Happy : JSON válido con 3 sensores → 201, almacenado en repo
-  HU-02 Unhappy: campo faltante → 422, no almacenado
+  HU-02 Unhappy: campo faltante → 400 indicando el campo, no almacenado
   HU-02 Unhappy: chaleco no vinculado → 403 + log
   HU-03 Happy : valores dentro de ±16g → 201
   HU-03 Unhappy: valor fuera de ±16g → 400, no almacenado
@@ -117,7 +117,7 @@ def _build_unlinked_vest() -> VestDevice:
 
 
 def _fake_current_user() -> TokenPayload:
-    return TokenPayload(user_id=USER_ID, email="t@t.com", role=Role.WORKER, type="access")
+    return TokenPayload(user_id=USER_ID, role=Role.WORKER, type="access")
 
 
 def _build_services(vest: VestDevice | None):
@@ -148,8 +148,9 @@ def _override_dependencies(reading_repo, command_service, query_service, vest_qu
 def client_and_repo():
     reading_repo, cmd, qry, vest_qry = _build_services(_build_linked_vest())
     _override_dependencies(reading_repo, cmd, qry, vest_qry)
-    with TestClient(app) as c:
-        yield c, reading_repo
+    # Sin context manager: las dependencias están sobreescritas, así que no
+    # hace falta arrancar el lifespan (que exige MongoDB).
+    yield TestClient(app), reading_repo
     app.dependency_overrides.clear()
 
 
@@ -158,8 +159,7 @@ def client_without_vest():
     """Cliente cuyo usuario NO tiene chaleco vinculado — para probar el 404."""
     reading_repo, cmd, qry, vest_qry = _build_services(None)
     _override_dependencies(reading_repo, cmd, qry, vest_qry)
-    with TestClient(app) as c:
-        yield c
+    yield TestClient(app)
     app.dependency_overrides.clear()
 
 
@@ -168,8 +168,7 @@ def client_with_unlinked_vest():
     """Chaleco existe en BD pero sin user_id — para probar HU-02 AC3 (403)."""
     reading_repo, cmd, qry, vest_qry = _build_services(_build_unlinked_vest())
     _override_dependencies(reading_repo, cmd, qry, vest_qry)
-    with TestClient(app) as c:
-        yield c, reading_repo
+    yield TestClient(app), reading_repo
     app.dependency_overrides.clear()
 
 
@@ -207,8 +206,17 @@ def test_hu02_datos_incompletos_no_almacenados(client_and_repo):
     client, repo = client_and_repo
     payload = {k: v for k, v in VALID_PAYLOAD.items() if k != "dorsal"}
     response = client.post("/api/v1/readings", json=payload)
-    assert response.status_code == 422
+    assert response.status_code == 400
+    assert "dorsal" in response.json()["detail"].lower()
     assert len(repo.saved) == 0
+
+
+def test_hu02_persiste_user_id_y_id_interno_del_chaleco(client_and_repo):
+    client, repo = client_and_repo
+    response = client.post("/api/v1/readings", json=VALID_PAYLOAD)
+    assert response.status_code == 201
+    assert repo.saved[0].user_id == USER_ID
+    assert repo.saved[0].vest_id == str(VEST_ID)
 
 
 def test_hu02_chaleco_no_vinculado_retorna_403(client_with_unlinked_vest, caplog):
@@ -251,7 +259,7 @@ def test_hu06_latest_devuelve_ultima_lectura(client_and_repo):
     assert response.status_code == 200
     body = response.json()
     assert body["posture_class"] == "adequate"
-    assert body["vest_id"] == VEST_MAC
+    assert body["vest_id"] == str(VEST_ID)
     assert body["battery_percent"] == 80
     assert "timestamp" in body
 

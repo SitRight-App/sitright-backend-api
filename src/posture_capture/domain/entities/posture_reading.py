@@ -20,3 +20,5 @@ class PostureReading:
     # Clave estable para agrupar las lecturas de una sesión: no depende del
     # formato del vest_id ni de comparar rangos horarios frágiles.
     session_id: UUID | None = None
+    # Usuario dueño del chaleco al capturar la lectura.
+    user_id: UUID | None = None

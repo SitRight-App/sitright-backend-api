@@ -30,6 +30,7 @@ class PostureCaptureCommandService(IPostureCaptureCommandService):
             timestamp=command.timestamp,
             battery_percent=command.battery_percent,
             session_id=command.session_id,
+            user_id=command.user_id,
         )
 
         try:

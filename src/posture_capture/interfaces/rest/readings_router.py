@@ -145,6 +145,22 @@ async def create_reading(
     ],
     vest_service: Annotated[IVestQueryService, Depends(get_vest_query_service)],
 ) -> ReadingResponse:
+    missing = [
+        name
+        for name, value in (
+            ("vest_id", request.vest_id),
+            ("cervical", request.cervical),
+            ("dorsal", request.dorsal),
+            ("lumbar", request.lumbar),
+        )
+        if value is None
+    ]
+    if missing:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Faltan campos obligatorios: {', '.join(missing)}",
+        )
+
     # el identificador del chaleco debe estar vinculado.
     vest = await vest_service.handle_get_vest_by_mac(
         GetVestByMacQuery(mac_address=request.vest_id)
@@ -167,7 +183,10 @@ async def create_reading(
 
     command = SaveReadingCommand(
         reading_id=uuid4(),
-        vest_id=request.vest_id,
+        # Id interno del chaleco: misma clave con la que guarda el subscriber
+        # MQTT y con la que se consultan las lecturas (/latest, /recent).
+        vest_id=str(vest.id),
+        user_id=vest.user_id,
         cervical=tuple(request.cervical),
         dorsal=tuple(request.dorsal),
         lumbar=tuple(request.lumbar),
