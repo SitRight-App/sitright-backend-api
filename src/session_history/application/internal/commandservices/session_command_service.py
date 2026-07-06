@@ -1,6 +1,6 @@
 """Implementación de ISessionCommandService."""
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 from ....domain.entities.posture_session import PostureSession
@@ -28,7 +28,7 @@ class SessionCommandService(ISessionCommandService):
     ) -> PostureSession:
         existing = await self.session_repository.find_active_by_user(command.user_id)
         if existing is not None:
-            if datetime.utcnow() - existing.started_at <= MAX_SESSION_DURATION:
+            if datetime.now(timezone.utc) - existing.started_at <= MAX_SESSION_DURATION:
                 # Idempotente: sesión activa dentro del tope → la devuelvo.
                 return existing
             # Excedió el tope de jornada: se quedó abierta. La cerramos en su
@@ -39,7 +39,7 @@ class SessionCommandService(ISessionCommandService):
             id=uuid4(),
             user_id=command.user_id,
             vest_device_id=command.vest_device_id,
-            started_at=datetime.utcnow(),
+            started_at=datetime.now(timezone.utc),
             note=command.note,
         )
         await self.session_repository.save(session)
@@ -61,7 +61,7 @@ class SessionCommandService(ISessionCommandService):
             return session  # idempotente
 
         summary = await self.readings_aggregator.aggregate_for_session(session.id)
-        session.close(summary, ended_at=datetime.utcnow())
+        session.close(summary, ended_at=datetime.now(timezone.utc))
         if command.note:
             session.note = command.note
         await self.session_repository.save(session)

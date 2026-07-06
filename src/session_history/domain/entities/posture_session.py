@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from uuid import UUID
 
 from ..value_objects.session_status import SessionStatus
@@ -22,12 +22,12 @@ class PostureSession:
         return self.status == SessionStatus.ACTIVE
 
     def close(self, summary: SessionSummary, ended_at: datetime | None = None) -> None:
-        self.ended_at = ended_at or datetime.utcnow()
+        self.ended_at = ended_at or datetime.now(timezone.utc)
         self.summary = summary
         self.status = SessionStatus.COMPLETED
 
     def cancel(self) -> None:
-        self.ended_at = datetime.utcnow()
+        self.ended_at = datetime.now(timezone.utc)
         self.status = SessionStatus.CANCELLED
 
     def increment_reading_count(self) -> None:

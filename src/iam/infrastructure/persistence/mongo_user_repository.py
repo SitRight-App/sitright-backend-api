@@ -3,6 +3,8 @@ from uuid import UUID
 
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
+from ....shared.datetime_utils import parse_utc
+
 from ...domain.entities.user import User
 from ...domain.value_objects.anthropometric_data import AnthropometricData
 from ...domain.value_objects.preferences import Preferences
@@ -77,8 +79,8 @@ class MongoUserRepository:
             email=doc["email"],
             password_hash=doc["password_hash"],
             role=Role(doc["role"]),
-            created_at=datetime.fromisoformat(doc["created_at"]),
-            updated_at=datetime.fromisoformat(doc["updated_at"]),
+            created_at=parse_utc(doc["created_at"]),
+            updated_at=parse_utc(doc["updated_at"]),
             anthropometric_data=AnthropometricData(
                 weight_kg=anthro_doc.get("weight_kg"),
                 height_cm=anthro_doc.get("height_cm"),

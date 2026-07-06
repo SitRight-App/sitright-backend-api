@@ -1,7 +1,9 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from uuid import UUID
 
 from motor.motor_asyncio import AsyncIOMotorDatabase
+
+from ....shared.datetime_utils import parse_utc
 
 from ...domain.entities.notification import (
     Notification,
@@ -40,13 +42,13 @@ class MongoNotificationRepository:
     async def mark_as_read(self, notification_id: UUID) -> None:
         await self._col.update_one(
             {"_id": str(notification_id)},
-            {"$set": {"is_read": True, "read_at": datetime.utcnow().isoformat()}},
+            {"$set": {"is_read": True, "read_at": datetime.now(timezone.utc).isoformat()}},
         )
 
     async def mark_all_as_read(self, user_id: UUID) -> int:
         result = await self._col.update_many(
             {"user_id": str(user_id), "is_read": False},
-            {"$set": {"is_read": True, "read_at": datetime.utcnow().isoformat()}},
+            {"$set": {"is_read": True, "read_at": datetime.now(timezone.utc).isoformat()}},
         )
         return result.modified_count
 
@@ -78,7 +80,7 @@ class MongoNotificationRepository:
             type=NotificationType(doc["type"]),
             message=doc["message"],
             channel=NotificationChannel(doc["channel"]),
-            sent_at=datetime.fromisoformat(doc["sent_at"]),
+            sent_at=parse_utc(doc["sent_at"]),
             is_read=doc.get("is_read", False),
-            read_at=datetime.fromisoformat(doc["read_at"]) if doc.get("read_at") else None,
+            read_at=parse_utc(doc["read_at"]) if doc.get("read_at") else None,
         )

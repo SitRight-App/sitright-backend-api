@@ -10,6 +10,8 @@ from uuid import UUID
 
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
+from ....shared.datetime_utils import parse_utc
+
 from ....posture_capture.domain.value_objects.sensor_data import SensorData
 from ...domain.services.zone_analysis_math import (
     DEFAULT_ZONE_THRESHOLDS_DEG,
@@ -64,7 +66,7 @@ class MongoZoneAnalyzer:
         async for doc in cursor:
             ts_raw = doc.get("timestamp")
             try:
-                ts = datetime.fromisoformat(ts_raw)
+                ts = parse_utc(ts_raw)
             except (TypeError, ValueError):
                 continue
             times.append(ts)

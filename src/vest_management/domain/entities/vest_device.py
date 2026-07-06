@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from uuid import UUID
 
 from ..value_objects.calibration_reference import CalibrationReference
@@ -24,7 +24,7 @@ class VestDevice:
     ) -> None:
         self.user_id = user_id
         self.mqtt_credentials = mqtt_credentials
-        self.linked_at = datetime.utcnow()
+        self.linked_at = datetime.now(timezone.utc)
         self.is_active = True
 
     def unlink(self) -> None:

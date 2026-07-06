@@ -3,6 +3,8 @@ from uuid import UUID
 
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
+from ....shared.datetime_utils import parse_utc
+
 from ...domain.entities.posture_reading import PostureReading
 from ...domain.value_objects.sensor_data import SensorData
 
@@ -77,7 +79,7 @@ class MongoPostureReadingRepository:
             cervical=SensorData(doc["cervical"]["ax"], doc["cervical"]["ay"], doc["cervical"]["az"]),
             dorsal=SensorData(doc["dorsal"]["ax"], doc["dorsal"]["ay"], doc["dorsal"]["az"]),
             lumbar=SensorData(doc["lumbar"]["ax"], doc["lumbar"]["ay"], doc["lumbar"]["az"]),
-            timestamp=datetime.fromisoformat(doc["timestamp"]),
+            timestamp=parse_utc(doc["timestamp"]),
             posture_class=doc["posture_class"],
             confidence=doc["confidence"],
             battery_percent=doc.get("battery_percent", 100),

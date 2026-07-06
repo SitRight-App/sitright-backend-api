@@ -3,6 +3,8 @@ from uuid import UUID
 
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
+from ....shared.datetime_utils import parse_utc
+
 from ...domain.entities.posture_session import PostureSession
 from ...domain.value_objects.session_status import SessionStatus
 from ...domain.value_objects.session_summary import SessionSummary
@@ -100,8 +102,8 @@ class MongoPostureSessionRepository:
             id=UUID(doc["_id"]),
             user_id=UUID(doc["user_id"]),
             vest_device_id=UUID(doc["vest_device_id"]),
-            started_at=datetime.fromisoformat(doc["started_at"]),
-            ended_at=datetime.fromisoformat(doc["ended_at"]) if doc.get("ended_at") else None,
+            started_at=parse_utc(doc["started_at"]),
+            ended_at=parse_utc(doc["ended_at"]) if doc.get("ended_at") else None,
             status=SessionStatus(doc["status"]),
             summary=summary,
             reading_count=doc.get("reading_count", 0),

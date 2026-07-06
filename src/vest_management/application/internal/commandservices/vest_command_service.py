@@ -3,7 +3,7 @@ escritura del bounded context vest_management.
 """
 import secrets
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from uuid import uuid4
 
 from .....iam.domain.services.password_service import PasswordService
@@ -50,7 +50,7 @@ class VestCommandService(IVestCommandService):
             id=uuid4(),
             mac_address=mac,
             firmware_version=command.firmware_version,
-            created_at=datetime.utcnow(),
+            created_at=datetime.now(timezone.utc),
             is_active=False,
         )
         await self.vest_device_repository.save(device)
@@ -77,7 +77,7 @@ class VestCommandService(IVestCommandService):
         creds = MqttCredentials(
             username=username,
             password_hash=self.password_service.hash(plain_password),
-            rotated_at=datetime.utcnow(),
+            rotated_at=datetime.now(timezone.utc),
         )
         device.link_to_user(command.user_id, creds)
         await self.vest_device_repository.save(device)
@@ -96,7 +96,7 @@ class VestCommandService(IVestCommandService):
             cervical=SensorData(*command.cervical),
             dorsal=SensorData(*command.dorsal),
             lumbar=SensorData(*command.lumbar),
-            calibrated_at=datetime.utcnow(),
+            calibrated_at=datetime.now(timezone.utc),
         )
         device.calibrate(reference)
         await self.vest_device_repository.save(device)

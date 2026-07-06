@@ -3,11 +3,14 @@ from uuid import UUID
 
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
+from ....shared.datetime_utils import ensure_utc
 from ...domain.entities.password_reset_token import PasswordResetToken
 
 
 def _as_dt(value) -> datetime:
-    return value if isinstance(value, datetime) else datetime.fromisoformat(value)
+    # Mongo devuelve las BSON Date como naive; las marcas ISO pueden venir sin
+    # zona. Se normaliza todo a UTC con zona para no mezclar aware y naive.
+    return ensure_utc(value if isinstance(value, datetime) else datetime.fromisoformat(value))
 
 
 class MongoPasswordResetTokenRepository:

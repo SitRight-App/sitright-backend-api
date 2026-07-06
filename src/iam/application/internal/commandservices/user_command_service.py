@@ -13,7 +13,7 @@ import hashlib
 import logging
 import secrets
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 from ....domain.entities.notification import Notification, NotificationChannel, NotificationType
@@ -112,7 +112,7 @@ class UserCommandService(IUserCommandService):
         if await self.user_repository.exists_by_email(command.email.lower()):
             raise UserAlreadyExistsError("El email ya está registrado")
 
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         user = User(
             id=uuid4(),
             name=command.name.strip(),
@@ -199,7 +199,7 @@ class UserCommandService(IUserCommandService):
         if not self.password_service.verify(command.current_password, user.password_hash):
             raise InvalidCurrentPasswordError("La contraseña actual es incorrecta")
         user.password_hash = self.password_service.hash(command.new_password)
-        user.updated_at = datetime.utcnow()
+        user.updated_at = datetime.now(timezone.utc)
         await self.user_repository.save(user)
         try:
             await self.email_service.send_password_changed(user.email, user.name)
@@ -224,7 +224,7 @@ class UserCommandService(IUserCommandService):
         # Invalida enlaces previos y genera uno nuevo (crudo por correo, hash en BD).
         await self.reset_token_repository.invalidate_for_user(user.id)
         raw = secrets.token_urlsafe(32)
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         token = PasswordResetToken(
             id=uuid4(),
             user_id=user.id,
@@ -250,7 +250,7 @@ class UserCommandService(IUserCommandService):
         token = await self.reset_token_repository.find_by_hash(
             _hash_token(command.token)
         )
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         if token is None or not token.is_valid(now):
             raise InvalidResetTokenError("El enlace no es válido o expiró")
         user = await self.user_repository.find_by_id(token.user_id)
@@ -300,7 +300,7 @@ class UserCommandService(IUserCommandService):
         if user is None:
             return
 
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         latest = await self.notification_repository.find_latest_by_type(user.id, type_)
         if latest is not None and (now - latest.sent_at) < _NOTIFY_COOLDOWN:
             return  # anti-spam: ya se notificó este tipo de evento hace poco.

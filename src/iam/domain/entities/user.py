@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from uuid import UUID
 
 from ..value_objects.anthropometric_data import AnthropometricData
@@ -25,7 +25,7 @@ class User:
 
     def deactivate(self) -> None:
         self.is_active = False
-        self.updated_at = datetime.utcnow()
+        self.updated_at = datetime.now(timezone.utc)
 
     def update_profile(
         self,
@@ -39,4 +39,4 @@ class User:
             self.anthropometric_data = anthropometric_data
         if preferences is not None:
             self.preferences = preferences
-        self.updated_at = datetime.utcnow()
+        self.updated_at = datetime.now(timezone.utc)

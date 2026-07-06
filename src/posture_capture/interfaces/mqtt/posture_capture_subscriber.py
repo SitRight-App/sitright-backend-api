@@ -7,6 +7,8 @@ from uuid import UUID, uuid4
 
 from asyncio_mqtt import Client as MqttClient, MqttError
 
+from ....shared.datetime_utils import parse_utc
+
 from ...domain.model.commands.save_reading_command import SaveReadingCommand
 from ...domain.services.posture_capture_command_service import (
     IPostureCaptureCommandService,
@@ -93,7 +95,7 @@ class PostureCaptureMqttSubscriber:
 
         timestamp_str = data.get("timestamp")
         timestamp = (
-            datetime.fromisoformat(timestamp_str) if timestamp_str else datetime.now(timezone.utc)
+            parse_utc(timestamp_str) if timestamp_str else datetime.now(timezone.utc)
         )
 
         command = SaveReadingCommand(

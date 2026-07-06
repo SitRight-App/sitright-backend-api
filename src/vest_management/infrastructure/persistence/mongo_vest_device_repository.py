@@ -3,6 +3,8 @@ from uuid import UUID
 
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
+from ....shared.datetime_utils import parse_utc
+
 from ....posture_capture.domain.value_objects.sensor_data import SensorData
 from ...domain.entities.vest_device import VestDevice
 from ...domain.value_objects.calibration_reference import CalibrationReference
@@ -81,7 +83,7 @@ class MongoVestDeviceRepository:
                 cervical=SensorData(cal["cervical"]["ax"], cal["cervical"]["ay"], cal["cervical"]["az"]),
                 dorsal=SensorData(cal["dorsal"]["ax"], cal["dorsal"]["ay"], cal["dorsal"]["az"]),
                 lumbar=SensorData(cal["lumbar"]["ax"], cal["lumbar"]["ay"], cal["lumbar"]["az"]),
-                calibrated_at=datetime.fromisoformat(cal["calibrated_at"]),
+                calibrated_at=parse_utc(cal["calibrated_at"]),
             )
 
         creds = doc.get("mqtt_credentials")
@@ -90,7 +92,7 @@ class MongoVestDeviceRepository:
             mqtt_creds = MqttCredentials(
                 username=creds["username"],
                 password_hash=creds["password_hash"],
-                rotated_at=datetime.fromisoformat(creds["rotated_at"]),
+                rotated_at=parse_utc(creds["rotated_at"]),
             )
 
         return VestDevice(
@@ -100,8 +102,8 @@ class MongoVestDeviceRepository:
             firmware_version=doc.get("firmware_version", "0.1.0"),
             battery_level=doc.get("battery_level", 100),
             is_active=doc.get("is_active", True),
-            linked_at=datetime.fromisoformat(doc["linked_at"]) if doc.get("linked_at") else None,
-            created_at=datetime.fromisoformat(doc["created_at"]),
+            linked_at=parse_utc(doc["linked_at"]) if doc.get("linked_at") else None,
+            created_at=parse_utc(doc["created_at"]),
             calibration_reference=calibration,
             mqtt_credentials=mqtt_creds,
         )

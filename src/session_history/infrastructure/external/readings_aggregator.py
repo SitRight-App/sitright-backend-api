@@ -4,6 +4,8 @@ from uuid import UUID
 
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
+from ....shared.datetime_utils import parse_utc
+
 from ...domain.value_objects.session_summary import SessionSummary
 
 
@@ -19,7 +21,7 @@ class MongoReadingsAggregator:
         self._col = db["posture_readings"]
 
     async def last_reading_at(self, session_id: UUID) -> datetime | None:
-        """Timestamp de la última lectura de la sesión (naive UTC, consistente
+        """Timestamp de la última lectura de la sesión (UTC con zona, consistente
         con `started_at`). Se usa para cerrar en la hora real, no la de pared."""
         doc = await self._col.find_one(
             {"session_id": str(session_id)},
@@ -30,7 +32,7 @@ class MongoReadingsAggregator:
         if not ts_raw:
             return None
         try:
-            return datetime.fromisoformat(ts_raw).replace(tzinfo=None)
+            return parse_utc(ts_raw)
         except (TypeError, ValueError):
             return None
 
@@ -65,8 +67,8 @@ class MongoReadingsAggregator:
         total_minutes = 0.0
         if first_ts and last_ts:
             try:
-                start = datetime.fromisoformat(first_ts)
-                end = datetime.fromisoformat(last_ts)
+                start = parse_utc(first_ts)
+                end = parse_utc(last_ts)
                 total_minutes = (end - start).total_seconds() / 60.0
             except ValueError:
                 total_minutes = 0.0
