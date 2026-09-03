@@ -73,6 +73,10 @@ from .session_history.infrastructure.persistence.mongo_session_repository import
     MongoPostureSessionRepository,
 )
 from .session_history.interfaces.rest import sessions_router
+from .training_data.infrastructure.persistence.mongo_training_sample_repository import (
+    MongoTrainingSampleRepository,
+)
+from .training_data.interfaces.rest import training_router
 from .shared.adapters import (
     ActiveSessionLookupAdapter,
     SessionStarterAdapter,
@@ -174,6 +178,9 @@ async def lifespan(app: FastAPI):
     # readings_router necesita resolver el chaleco del usuario para filtrar
     # /latest, /recent y /latest/raw, y validar 403 en POST por MAC.
     readings_router.set_vest_query_service(vest_query_service)
+
+    # ── Training data (captura de dataset para la Ruta B; endpoints solo-admin)
+    training_router.set_repository(MongoTrainingSampleRepository(db))
 
     # ── Session History
     session_repo = MongoPostureSessionRepository(db)
@@ -332,6 +339,7 @@ app.include_router(readings_router.router)
 app.include_router(recommendations_router)
 app.include_router(vests_router.router)
 app.include_router(sessions_router.router)
+app.include_router(training_router.router)
 
 
 @app.get("/health", tags=["health"])
