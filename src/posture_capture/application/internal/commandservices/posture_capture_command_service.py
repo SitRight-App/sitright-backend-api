@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from ....domain.entities.posture_reading import PostureReading
 from ....domain.model.commands.save_reading_command import SaveReadingCommand
 from ....domain.repositories.posture_reading_repository import PostureReadingRepository
+from ....domain.services.calibration_lookup_port import CalibrationLookupPort
 from ....domain.services.ml_classifier_port import MLClassifierPort
 from ....domain.services.posture_capture_command_service import (
     IPostureCaptureCommandService,
@@ -19,6 +20,7 @@ logger = logging.getLogger(__name__)
 class PostureCaptureCommandService(IPostureCaptureCommandService):
     posture_reading_repository: PostureReadingRepository
     ml_classifier: MLClassifierPort
+    calibration_lookup: CalibrationLookupPort | None = None
 
     async def handle_save_reading(self, command: SaveReadingCommand) -> PostureReading:
         reading = PostureReading(
@@ -33,8 +35,15 @@ class PostureCaptureCommandService(IPostureCaptureCommandService):
             user_id=command.user_id,
         )
 
+        # La calibración (postura neutra del usuario) permite clasificar por
+        # desviación con los tres sensores; si no la hay, el ml-service usa su
+        # modelo por defecto.
+        reference = None
+        if self.calibration_lookup is not None and command.user_id is not None:
+            reference = await self.calibration_lookup.get_reference(command.user_id)
+
         try:
-            posture_class, confidence = await self.ml_classifier.classify(reading)
+            posture_class, confidence = await self.ml_classifier.classify(reading, reference)
             reading = dataclasses.replace(
                 reading, posture_class=posture_class, confidence=confidence
             )

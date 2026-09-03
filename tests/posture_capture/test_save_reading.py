@@ -65,7 +65,7 @@ class _InMemoryReadingRepo:
 
 
 class _StubMLClient:
-    async def classify(self, reading: PostureReading) -> tuple[str, float]:
+    async def classify(self, reading: PostureReading, reference=None) -> tuple[str, float]:
         return "adequate", 0.95
 
 

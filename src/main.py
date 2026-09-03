@@ -28,6 +28,9 @@ from .posture_capture.application.internal.queryservices.posture_capture_query_s
     PostureCaptureQueryService,
 )
 from .posture_capture.infrastructure.external.ml_client import MLServiceClient
+from .posture_capture.infrastructure.external.vest_calibration_lookup import (
+    VestCalibrationLookup,
+)
 from .posture_capture.infrastructure.persistence.mongo_posture_reading_repository import (
     MongoPostureReadingRepository,
 )
@@ -161,6 +164,7 @@ async def lifespan(app: FastAPI):
     posture_capture_command_service = PostureCaptureCommandService(
         posture_reading_repository=posture_repo,
         ml_classifier=ml_client,
+        calibration_lookup=VestCalibrationLookup(vest_query_service),
     )
     posture_capture_query_service = PostureCaptureQueryService(
         posture_reading_repository=posture_repo
